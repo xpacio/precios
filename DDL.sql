@@ -1,4 +1,3 @@
--- Activar extensión para generación de UUID
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Tabla de Usuarios
@@ -14,6 +13,17 @@ CREATE TABLE usuarios (
     can_download BOOLEAN DEFAULT TRUE, -- Permiso para descargar archivos
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Fecha y hora de creación del registro
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Fecha y hora de la última actualización (requeriría un trigger para auto-actualización)
+);
+
+-- Tabla de API Keys
+CREATE TABLE api_keys (
+    id SERIAL PRIMARY KEY,
+    api_key VARCHAR(64) UNIQUE NOT NULL,
+    descripcion VARCHAR(255),
+    usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabla de Sucursales
@@ -76,6 +86,15 @@ CREATE INDEX idx_archivo_sucursal_archivo_id ON archivo_sucursal (archivo_id);
 CREATE UNIQUE INDEX idx_usuarios_nickname ON usuarios (nickname);
 
 -- Usuario inicial de administración: admin / admin123
--- La contraseña se inserta hasheada para que sea compatible con la función password_verify() de PHP
-INSERT INTO usuarios (nombre, nickname, password, clavecorta, enabled, can_upload, can_download) 
-VALUES ('Administrador', 'admin', '$2y$10$mC7p6pEcZatSev9S/0S.uuW3.B7S9U9U9U9U9U9U9U9U9U9U9U9U9', '1234', TRUE, TRUE, TRUE);
+INSERT INTO usuarios (nombre, nickname, password, clavecorta, enabled, can_upload, can_download)
+VALUES ('Administrador', 'admin', '$2y$12$lNtGKteJ95QtMhcCbt9G2O0gTdnS92qxKfgBY4c99bD2dADwQ9.uS', '1234', TRUE, TRUE, TRUE);
+
+-- API Key inicial para el administrador
+INSERT INTO api_keys (api_key, descripcion, usuario_id, enabled)
+VALUES ('precios_api_key_2024', 'API Key por defecto del administrador', 1, TRUE);
+
+-- Sucursales iniciales
+INSERT INTO sucursales (id_sucursal, nombre_sucursal, enabled, sync) VALUES
+('S001', 'Sucursal Central', TRUE, TRUE),
+('S002', 'Sucursal Norte', TRUE, FALSE),
+('S003', 'Sucursal Sur', TRUE, FALSE);

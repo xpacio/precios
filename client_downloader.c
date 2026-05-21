@@ -75,6 +75,7 @@ int download_file(struct Config config) {
 
         // 2. Configurar cabeceras de petición
         char buf[256];
+        headers = curl_slist_append(headers, "X-API-Key: precios_api_key_2024");
         if (config.local_md5) {
             snprintf(buf, sizeof(buf), "MD5: %s", config.local_md5);
             headers = curl_slist_append(headers, buf);
@@ -149,6 +150,8 @@ int main() {
     cfg.url = "http://localhost/api/v1/download/S001/precios.zip";
     cfg.dest_file = "precios.zip";
     cfg.local_md5 = "e99a18c4"; // MD5 del archivo que ya tenemos
+    // NOTA: El header X-API-Key debe enviarse en cada peticion.
+    //       Agregar: headers = curl_slist_append(headers, "X-API-Key: precios_api_key_2024");
     cfg.is_desblinde = 0;
     cfg.clave_corta = NULL;
 

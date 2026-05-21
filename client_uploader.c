@@ -14,6 +14,7 @@ int main(int argc, char *argv[]) {
     // Parámetros de ejemplo (En una app real vendrían de argumentos o config)
     const char *url = "http://localhost/api/v1/upload/S001/archivo_prueba.zip";
     const char *filepath = "archivo_prueba.zip"; // El archivo debe existir localmente
+    const char *api_key = "precios_api_key_2024"; // API Key para autenticación
     
     // Metadatos para los Headers
     const char *h_nombre = "archivo_prueba.zip";
@@ -33,6 +34,9 @@ int main(int argc, char *argv[]) {
 
         // 1. Configurar Headers personalizados
         char buf[256];
+
+        snprintf(buf, sizeof(buf), "X-API-Key: %s", api_key);
+        headers = curl_slist_append(headers, buf);
         
         snprintf(buf, sizeof(buf), "NOMBRE: %s", h_nombre);
         headers = curl_slist_append(headers, buf);
