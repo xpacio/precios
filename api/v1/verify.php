@@ -13,6 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
+    // Ensure directories are traversable by www-data
+    system("chmod -R o+X " . escapeshellarg($PRECIOS_DIR) . " 2>/dev/null");
+
     $pdo = getDB();
     $cambiados = 0;
     $aparecidos = 0;
