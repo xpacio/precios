@@ -104,11 +104,11 @@ require __DIR__ . '/header.php';
         $stmt->execute([$sucursalDetalle]);
         $asociados = $stmt->fetchAll();
 
-        // Archivos disponibles para asociar (que no estén ya asociados por nombre)
+        // Archivos disponibles para asociar (solo presentes en disco)
         $stmt = $pdo->prepare("
-            SELECT a.id, a.path, a.nombre, a.ausente
+            SELECT a.id, a.path, a.nombre
             FROM archivos a
-            WHERE a.id NOT IN (
+            WHERE a.ausente = FALSE AND a.id NOT IN (
                 SELECT asu2.archivo_id FROM archivo_sucursal asu2
                 WHERE asu2.sucursal_id = ? AND asu2.enabled = TRUE
             )
@@ -175,7 +175,6 @@ require __DIR__ . '/header.php';
                 <?php foreach ($disponibles as $d): ?>
                     <option value="<?= htmlspecialchars($d['id']) ?>">
                         <?= htmlspecialchars($d['path'] . '/' . $d['nombre']) ?>
-                        <?= ($d['ausente'] === 't' || $d['ausente'] === true) ? '(Ausente)' : '' ?>
                     </option>
                 <?php endforeach; ?>
             </select>

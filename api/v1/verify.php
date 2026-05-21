@@ -22,11 +22,12 @@ try {
     $desaparecidos = 0;
     $sin_cambios = 0;
 
-    $stmt = $pdo->query("SELECT id, path, nombre, md5zip, ausente FROM archivos");
+    $stmt = $pdo->query("SELECT id, path, nombre, md5flat, md5zip, ausente FROM archivos");
     $rows = $stmt->fetchAll();
 
     foreach ($rows as $row) {
         $fullPath = $PRECIOS_DIR . '/' . $row['path'] . '/' . $row['nombre'];
+        $brPath = $PRECIOS_DIR . '/' . $row['path'] . '/' . pathinfo($row['nombre'], PATHINFO_FILENAME) . '.br';
         $exists = file_exists($fullPath);
         $wasAusente = ($row['ausente'] === 't' || $row['ausente'] === true);
 
@@ -39,21 +40,28 @@ try {
             continue;
         }
 
-        $md5 = substr(md5_file($fullPath), 0, 8);
-        $size = filesize($fullPath);
+        $md5flat = substr(md5_file($fullPath), 0, 8);
+        $changed = $wasAusente || $row['md5flat'] !== $md5flat || !file_exists($brPath);
 
-        if ($wasAusente) {
-            $pdo->prepare("UPDATE archivos SET ausente = FALSE, md5zip = ?, peso = ?, ultimo_cambio = NOW(), updated_at = NOW() WHERE id = ?")
-                ->execute([$md5, $size, $row['id']]);
-            $aparecidos++;
-        } elseif ($row['md5zip'] !== $md5) {
-            $pdo->prepare("UPDATE archivos SET md5zip = ?, peso = ?, ultimo_cambio = NOW(), updated_at = NOW() WHERE id = ?")
-                ->execute([$md5, $size, $row['id']]);
-            $pdo->prepare("UPDATE archivo_sucursal SET sync = FALSE, updated_at = NOW() WHERE archivo_id = ?")
-                ->execute([$row['id']]);
-            $cambiados++;
+        if ($changed) {
+            $brContent = brotli_compress(file_get_contents($fullPath), 11);
+            file_put_contents($brPath, $brContent);
+            $md5zip = substr(md5_file($brPath), 0, 8);
+            $size = filesize($brPath);
+
+            $pdo->prepare("UPDATE archivos SET ausente = FALSE, md5flat = ?, md5zip = ?, peso = ?, ultimo_cambio = NOW(), updated_at = NOW() WHERE id = ?")
+                ->execute([$md5flat, $md5zip, $size, $row['id']]);
+
+            if (!$wasAusente) {
+                $pdo->prepare("UPDATE archivo_sucursal SET sync = FALSE, updated_at = NOW() WHERE archivo_id = ?")
+                    ->execute([$row['id']]);
+                $cambiados++;
+            } else {
+                $aparecidos++;
+            }
         } else {
             // Actualizar peso por si acaso
+            $size = filesize($brPath);
             $pdo->prepare("UPDATE archivos SET peso = ? WHERE id = ? AND peso != ?")
                 ->execute([$size, $row['id'], $size]);
             $sin_cambios++;

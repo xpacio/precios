@@ -2,17 +2,17 @@
 
 require_once __DIR__ . '/../../config/database.php';
 
-header('Content-Type: text/plain');
+header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
-    echo "ERROR: Use GET para listar pendientes";
+    echo json_encode(['error' => 'Use GET']);
     exit;
 }
 
 if (!$idSucursal) {
     http_response_code(400);
-    echo "ERROR: Falta sucursal_id en la URI";
+    echo json_encode(['error' => 'Falta sucursal_id']);
     exit;
 }
 
@@ -20,32 +20,34 @@ try {
     $pdo = getDB();
 
     $stmt = $pdo->prepare("
-        SELECT a.id, a.path, a.nombre, a.md5zip, a.peso, a.ultimo_cambio
+        SELECT a.id, a.nombre, a.md5zip, a.md5flat, a.peso, a.ultimo_cambio
         FROM archivo_sucursal asu
         JOIN archivos a ON a.id = asu.archivo_id
         WHERE asu.sucursal_id = ? AND asu.enabled = TRUE AND asu.sync = FALSE AND a.ausente = FALSE
-        ORDER BY a.path, a.nombre
+        ORDER BY a.nombre
     ");
     $stmt->execute([$idSucursal]);
     $files = $stmt->fetchAll();
 
-    echo "STATUS: OK\n";
-    echo "SUCURSAL: {$idSucursal}\n";
-    echo "PENDIENTES: " . count($files) . "\n";
-    echo "---\n";
+    $result = array_map(function ($f) {
+        return [
+            'id' => $f['id'],
+            'nombre' => $f['nombre'],
+            'md5zip' => $f['md5zip'],
+            'md5flat' => $f['md5flat'],
+            'peso' => (int)$f['peso'],
+            'ultimo_cambio' => $f['ultimo_cambio'],
+        ];
+    }, $files);
 
-    foreach ($files as $f) {
-        echo "ID: {$f['id']}\n";
-        echo "RUTA: {$f['path']}/{$f['nombre']}\n";
-        echo "MD5: {$f['md5zip']}\n";
-        echo "PESO: {$f['peso']}\n";
-        if ($f['ultimo_cambio']) {
-            echo "CAMBIADO: {$f['ultimo_cambio']}\n";
-        }
-        echo "---\n";
-    }
+    echo json_encode([
+        'status' => 'OK',
+        'sucursal' => $idSucursal,
+        'pendientes' => count($result),
+        'archivos' => $result,
+    ], JSON_PRETTY_PRINT);
 
 } catch (Exception $e) {
     http_response_code(500);
-    echo "ERROR: {$e->getMessage()}\n";
+    echo json_encode(['error' => $e->getMessage()]);
 }
