@@ -44,8 +44,10 @@ try {
         $changed = $wasAusente || $row['md5flat'] !== $md5flat || !file_exists($brPath);
 
         if ($changed) {
-            $brContent = brotli_compress(file_get_contents($fullPath), 11);
-            file_put_contents($brPath, $brContent);
+            $flatContent = file_get_contents($fullPath);
+            if ($flatContent === false) throw new RuntimeException("No se pudo leer: $fullPath");
+            $brContent = brotli_compress($flatContent, 11);
+            if (file_put_contents($brPath, $brContent) === false) throw new RuntimeException("No se pudo escribir: $brPath");
             $md5zip = substr(md5_file($brPath), 0, 8);
             $size = filesize($brPath);
 
@@ -60,10 +62,16 @@ try {
                 $aparecidos++;
             }
         } else {
-            // Actualizar peso por si acaso
-            $size = filesize($brPath);
+            $size = @filesize($brPath);
+            if ($size === false) {
+                echo "WARN: {$row['nombre']} .br missing, regenerating\n";
+                $flatContent = file_get_contents($fullPath);
+                $brContent = brotli_compress($flatContent, 11);
+                file_put_contents($brPath, $brContent);
+                $size = filesize($brPath);
+            }
             $pdo->prepare("UPDATE archivos SET peso = ? WHERE id = ? AND peso != ?")
-                ->execute([$size, $row['id'], $size]);
+                ->execute([(int)$size, $row['id'], (int)$size]);
             $sin_cambios++;
         }
     }

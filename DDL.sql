@@ -32,28 +32,27 @@ CREATE TABLE sucursales (
 );
 
 CREATE TABLE archivos (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    path VARCHAR(255) NOT NULL,
-    nombre VARCHAR(50) NOT NULL,
-    peso BIGINT DEFAULT 0,
+    id SERIAL PRIMARY KEY,
+    ruta VARCHAR(500) NOT NULL,
+    nombre VARCHAR(255) NOT NULL,
+    peso BIGINT NOT NULL DEFAULT 0,
     md5zip CHAR(8),
-    md5flat CHAR(8),
-    ausente BOOLEAN DEFAULT TRUE,
-    ultimo_cambio TIMESTAMP,
-    fecha_archivo TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    md5flat CHAR(8) DEFAULT '',
+    xxh3 CHAR(16),
+    comprimido BOOLEAN DEFAULT TRUE,
+    status VARCHAR(10) DEFAULT 'ready',
     is_desblinde BOOLEAN DEFAULT FALSE,
-    usuario_que_cargo INT REFERENCES usuarios(id),
     n_descargas INT DEFAULT 0,
+    fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (path, nombre)
+    UNIQUE (ruta, nombre)
 );
 
 CREATE TABLE archivo_sucursal (
-    archivo_id UUID NOT NULL REFERENCES archivos(id) ON DELETE RESTRICT,
-    sucursal_id VARCHAR(5) NOT NULL REFERENCES sucursales(id_sucursal) ON DELETE RESTRICT,
-    nombre VARCHAR(50) NOT NULL,
+    archivo_id INT NOT NULL REFERENCES archivos(id) ON DELETE CASCADE,
+    sucursal_id VARCHAR(5) NOT NULL REFERENCES sucursales(id_sucursal),
+    nombre VARCHAR(255) NOT NULL,
     enabled BOOLEAN DEFAULT TRUE,
     sync BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -72,3 +71,8 @@ VALUES ('Administrador', 'admin', '$2y$12$lNtGKteJ95QtMhcCbt9G2O0gTdnS92qxKfgBY4
 
 INSERT INTO api_keys (api_key, descripcion, usuario_id, enabled)
 VALUES ('precios_api_key_2024', 'API Key por defecto del administrador', 1, TRUE);
+
+INSERT INTO sucursales (id_sucursal, nombre_sucursal, enabled) VALUES
+('S001', 'Sucursal Central', TRUE),
+('S002', 'Sucursal Norte', TRUE),
+('S003', 'Sucursal Sur', TRUE);

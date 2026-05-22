@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "dgSpecHash": "lx2gDXimSIGmZUeNJzrBZcAjTHpRZm0DaibzPtDWHc1s90Vm8gVF2W7NIroR745BhWsC+6uVPalAckWlPJCRJw==",
+  "success": true,
+  "projectFilePath": "/var/www/precios/cliente-cs/ClientePrecios.csproj",
+  "expectedPackageFiles": [
+    "/root/.nuget/packages/microsoft.extensions.configuration/10.0.0/microsoft.extensions.configuration.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.extensions.configuration.abstractions/10.0.0/microsoft.extensions.configuration.abstractions.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.extensions.configuration.fileextensions/10.0.0/microsoft.extensions.configuration.fileextensions.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.extensions.configuration.json/10.0.0/microsoft.extensions.configuration.json.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.extensions.fileproviders.abstractions/10.0.0/microsoft.extensions.fileproviders.abstractions.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.extensions.fileproviders.physical/10.0.0/microsoft.extensions.fileproviders.physical.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.extensions.filesystemglobbing/10.0.0/microsoft.extensions.filesystemglobbing.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.extensions.primitives/10.0.0/microsoft.extensions.primitives.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.net.illink.tasks/8.0.26/microsoft.net.illink.tasks.8.0.26.nupkg.sha512",
+    "/root/.nuget/packages/system.io.pipelines/10.0.0/system.io.pipelines.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/system.text.encodings.web/10.0.0/system.text.encodings.web.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/system.text.json/10.0.0/system.text.json.10.0.0.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.netcore.app.runtime.win-x86/8.0.26/microsoft.netcore.app.runtime.win-x86.8.0.26.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.aspnetcore.app.runtime.win-x86/8.0.26/microsoft.aspnetcore.app.runtime.win-x86.8.0.26.nupkg.sha512",
+    "/root/.nuget/packages/microsoft.netcore.app.host.win-x86/8.0.26/microsoft.netcore.app.host.win-x86.8.0.26.nupkg.sha512"
+  ],
+  "logs": []
+}

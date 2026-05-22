@@ -4,18 +4,16 @@ $pageTitle = 'Archivos';
 
 $pdo = getDB();
 
-// Fetch all files grouped by path
 $stmt = $pdo->query("
-    SELECT id, path, nombre, peso, md5zip, ausente, ultimo_cambio, updated_at
+    SELECT id, ruta, nombre, peso, md5zip, xxh3, comprimido, status, fecha_carga
     FROM archivos
-    ORDER BY path, nombre
+    ORDER BY ruta, nombre
 ");
 $archivos = $stmt->fetchAll();
 
-// Group by path
 $groups = [];
 foreach ($archivos as $f) {
-    $groups[$f['path']][] = $f;
+    $groups[$f['ruta']][] = $f;
 }
 
 require __DIR__ . '/header.php';
@@ -31,48 +29,25 @@ require __DIR__ . '/header.php';
             <tr>
                 <th>Archivo</th>
                 <th>MD5</th>
+                <th>XXH3</th>
                 <th>Peso</th>
-                <th>Estado</th>
-                <th>Último cambio</th>
-                <th>Acción</th>
+                <th>Status</th>
+                <th>Registrado</th>
             </tr>
         </thead>
         <tbody>
-            <?php
-            $first = true;
-            foreach ($groups as $path => $files):
-                $pathParts = explode('/', $path);
-                $region = $pathParts[0];
-                $subdir = count($pathParts) > 1 ? substr($path, strlen($region) + 1) : '';
-            ?>
-                <tr class="group-header">
-                    <td colspan="6">📁 <?= htmlspecialchars($path) ?></td>
+            <?php foreach ($groups as $ruta => $files): ?>
+                <tr style="background:#f0f0f0;font-weight:bold">
+                    <td colspan="6">📁 <?= htmlspecialchars($ruta) ?></td>
                 </tr>
-                <?php foreach ($files as $f):
-                    $esCambiado = $f['ultimo_cambio'] && (time() - strtotime($f['ultimo_cambio'])) < 3600;
-                    $esAusente = ($f['ausente'] === 't' || $f['ausente'] === true);
-                    $rowClass = $esCambiado ? 'cambiado' : ($esAusente ? 'ausente' : '');
-                ?>
-                    <tr class="<?= $rowClass ?>">
+                <?php foreach ($files as $f): ?>
+                    <tr>
                         <td><?= htmlspecialchars($f['nombre']) ?></td>
                         <td><code><?= htmlspecialchars($f['md5zip'] ?? '-') ?></code></td>
+                        <td><code><?= htmlspecialchars($f['xxh3'] ?? '-') ?></code></td>
                         <td><?= $f['peso'] ? number_format($f['peso']) . ' B' : '-' ?></td>
-                        <td>
-                            <?php if ($esAusente): ?>
-                                <span class="badge-err">Ausente</span>
-                            <?php elseif ($esCambiado): ?>
-                                <span class="badge-warn">Cambiado</span>
-                            <?php else: ?>
-                                <span class="badge-ok">OK</span>
-                            <?php endif; ?>
-                        </td>
-                        <td><?= $f['ultimo_cambio'] ? htmlspecialchars($f['ultimo_cambio']) : '-' ?></td>
-                        <td>
-                            <form method="POST" action="/api/v1/sync/<?= htmlspecialchars($f['id']) ?>" style="display:inline" target="_blank">
-                                <input type="hidden" name="X-API-Key" value="precios_api_key_2024">
-                                <button type="submit" class="secondary outline" style="padding: 0.2rem 0.5rem;font-size:0.8rem">Sync</button>
-                            </form>
-                        </td>
+                        <td><?= htmlspecialchars($f['status'] ?? 'ready') ?></td>
+                        <td><?= htmlspecialchars($f['fecha_carga']) ?></td>
                     </tr>
                 <?php endforeach; ?>
             <?php endforeach; ?>

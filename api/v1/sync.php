@@ -1,60 +1,54 @@
 <?php
 
-require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../lib/file_processor.php';
 
-ini_set('max_execution_time', 3600);
+header('Content-Type: application/json');
 
-header('Content-Type: text/plain');
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
-    echo "ERROR: Use POST para sincronizar";
+    echo json_encode(['status' => 'ERROR', 'mensaje' => 'Use GET']);
     exit;
 }
 
-$archivo_id = $idSucursal ?? null;
+$startTime = microtime(true);
 
-try {
-    $pdo = getDB();
+$scriptPath = __DIR__ . '/../../scripts/precios.sh';
 
-    if ($archivo_id) {
-        // Sync por archivo
-        $stmt = $pdo->prepare("SELECT path, nombre FROM archivos WHERE id = ?");
-        $stmt->execute([$archivo_id]);
-        $file = $stmt->fetch();
+$output = [];
+$returnCode = 0;
+$realScript = realpath($scriptPath);
+exec("sudo " . escapeshellarg($realScript), $output, $returnCode);
 
-        if (!$file) {
-            http_response_code(404);
-            echo "ERROR: Archivo no encontrado\n";
-            exit;
-        }
-
-        $relPath = $file['path'] . '/' . $file['nombre'];
-        $cmd = sprintf('/root/scripts/precios-file.sh %s 2>&1', escapeshellarg($relPath));
-        echo "Ejecutando: precios-file.sh {$relPath}\n";
-        passthru($cmd, $exitCode);
-
-        if ($exitCode !== 0) {
-            echo "ERROR: Rsync falló con código {$exitCode}\n";
-            exit;
-        }
-    } else {
-        // Sync completo
-        $cmd = '/root/scripts/precios.sh 2>&1';
-        echo "Ejecutando: precios.sh\n";
-        passthru($cmd, $exitCode);
-
-        if ($exitCode !== 0) {
-            echo "ERROR: Rsync falló con código {$exitCode}\n";
-            exit;
-        }
-    }
-
-    // Post-sync: verificar MD5
-    echo "\n--- Verificando MD5 ---\n";
-    require __DIR__ . '/verify.php';
-
-} catch (Exception $e) {
+if ($returnCode !== 0 && $returnCode !== 2) {
     http_response_code(500);
-    echo "ERROR: {$e->getMessage()}\n";
+    echo json_encode([
+        'status' => 'ERROR',
+        'mensaje' => "precios.sh falló (código $returnCode)"
+    ]);
+    exit;
 }
+
+$changedFiles = array_values(array_filter($output, fn($line) => trim($line) !== ''));
+
+$results = [];
+
+foreach ($changedFiles as $relPath) {
+    $results[] = processFile($relPath);
+}
+
+$elapsed = round(microtime(true) - $startTime, 2);
+
+$ok = count(array_filter($results, fn($r) => $r['status'] === 'OK'));
+$skip = count(array_filter($results, fn($r) => $r['status'] === 'SKIP'));
+$err = count(array_filter($results, fn($r) => $r['status'] === 'ERROR'));
+
+echo json_encode([
+    'status' => 'OK',
+    'elapsed' => $elapsed . 's',
+    'total_files' => count($changedFiles),
+    'inserted_updated' => $ok,
+    'skipped' => $skip,
+    'errors' => $err,
+    'files' => $changedFiles,
+    'results' => $results
+]);

@@ -6,14 +6,12 @@ $pdo = getDB();
 $mensaje = '';
 $error = '';
 
-// Handle association creation
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $sucursalId = $_POST['sucursal_id'] ?? '';
-    $archivoId = $_POST['archivo_id'] ?? '';
+    $archivoId = (int)($_POST['archivo_id'] ?? 0);
 
     if ($_POST['action'] === 'asociar' && $sucursalId && $archivoId) {
         try {
-            // Get file nombre
             $stmt = $pdo->prepare("SELECT nombre FROM archivos WHERE id = ?");
             $stmt->execute([$archivoId]);
             $file = $stmt->fetch();
@@ -21,7 +19,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if (!$file) {
                 $error = 'Archivo no encontrado';
             } else {
-                // Check no duplicate nombre
                 $stmt = $pdo->prepare("
                     SELECT 1 FROM archivo_sucursal asu
                     JOIN archivos a ON a.id = asu.archivo_id
@@ -51,7 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
     }
 
-    // Redirect to avoid re-POST
     $query = $sucursalId ? '?sucursal=' . urlencode($sucursalId) : '';
     header('Location: /dashboard/sucursales' . $query);
     exit;
@@ -59,14 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 $sucursalDetalle = $_GET['sucursal'] ?? '';
 
-// List all sucursales
 $stmt = $pdo->query("
     SELECT s.id_sucursal, s.nombre_sucursal, s.enabled,
-           COUNT(DISTINCT asu.archivo_id) AS total_asociados,
-           COUNT(DISTINCT CASE WHEN asu.sync = FALSE AND a.ausente = FALSE THEN asu.archivo_id END) AS pendientes
+           COUNT(DISTINCT asu.archivo_id) AS total_asociados
     FROM sucursales s
     LEFT JOIN archivo_sucursal asu ON s.id_sucursal = asu.sucursal_id AND asu.enabled = TRUE
-    LEFT JOIN archivos a ON a.id = asu.archivo_id
     GROUP BY s.id_sucursal, s.nombre_sucursal, s.enabled
     ORDER BY s.id_sucursal
 ");
@@ -91,28 +84,26 @@ require __DIR__ . '/header.php';
     $suc = $stmt->fetch();
 
     if (!$suc) {
-        echo '<p class="badge-err">Sucursal no encontrada</p>';
+        echo '<p>style="color:red"">Sucursal no encontrada</p>';
     } else {
-        // Associados
         $stmt = $pdo->prepare("
-            SELECT a.id, a.path, a.nombre, a.md5zip, a.peso, a.ausente, asu.sync, asu.created_at AS asociado_desde
+            SELECT a.id, a.ruta, a.nombre, a.md5zip, a.xxh3, a.peso, asu.sync, asu.created_at AS asociado_desde
             FROM archivo_sucursal asu
             JOIN archivos a ON a.id = asu.archivo_id
             WHERE asu.sucursal_id = ? AND asu.enabled = TRUE
-            ORDER BY a.path, a.nombre
+            ORDER BY a.ruta, a.nombre
         ");
         $stmt->execute([$sucursalDetalle]);
         $asociados = $stmt->fetchAll();
 
-        // Archivos disponibles para asociar (solo presentes en disco)
         $stmt = $pdo->prepare("
-            SELECT a.id, a.path, a.nombre
+            SELECT a.id, a.ruta, a.nombre
             FROM archivos a
-            WHERE a.ausente = FALSE AND a.id NOT IN (
+            WHERE a.id NOT IN (
                 SELECT asu2.archivo_id FROM archivo_sucursal asu2
                 WHERE asu2.sucursal_id = ? AND asu2.enabled = TRUE
             )
-            ORDER BY a.path, a.nombre
+            ORDER BY a.ruta, a.nombre
         ");
         $stmt->execute([$sucursalDetalle]);
         $disponibles = $stmt->fetchAll();
@@ -129,7 +120,7 @@ require __DIR__ . '/header.php';
                 <tr>
                     <th>Archivo</th>
                     <th>MD5</th>
-                    <th>Estado</th>
+                    <th>XXH3</th>
                     <th>Sincronizado</th>
                     <th>Acción</th>
                 </tr>
@@ -139,19 +130,18 @@ require __DIR__ . '/header.php';
                     <tr><td colspan="5">Sin archivos asociados</td></tr>
                 <?php else: ?>
                     <?php foreach ($asociados as $a):
-                        $esAusente = ($a['ausente'] === 't' || $a['ausente'] === true);
                         $estaSync = ($a['sync'] === 't' || $a['sync'] === true);
                     ?>
                         <tr>
-                            <td><?= htmlspecialchars($a['path'] . '/' . $a['nombre']) ?></td>
+                            <td><?= htmlspecialchars($a['ruta'] . '/' . $a['nombre']) ?></td>
                             <td><code><?= htmlspecialchars($a['md5zip'] ?? '-') ?></code></td>
-                            <td><?= $esAusente ? '<span class="badge-err">Ausente</span>' : '<span class="badge-ok">Presente</span>' ?></td>
-                            <td><?= $estaSync ? '<span class="badge-ok">✔</span>' : '<span class="badge-warn">Pendiente</span>' ?></td>
+                            <td><code><?= htmlspecialchars($a['xxh3'] ?? '-') ?></code></td>
+                            <td><?= $estaSync ? '<span>✔</span>' : '<span>Pendiente</span>' ?></td>
                             <td>
                                 <form method="POST" action="/dashboard/sucursales" style="display:inline">
                                     <input type="hidden" name="action" value="desasociar">
                                     <input type="hidden" name="sucursal_id" value="<?= htmlspecialchars($sucursalDetalle) ?>">
-                                    <input type="hidden" name="archivo_id" value="<?= htmlspecialchars($a['id']) ?>">
+                                    <input type="hidden" name="archivo_id" value="<?= (int)$a['id'] ?>">
                                     <button type="submit" class="secondary outline" style="padding:0.2rem 0.5rem;font-size:0.8rem">Desasociar</button>
                                 </form>
                             </td>
@@ -173,8 +163,8 @@ require __DIR__ . '/header.php';
             <select name="archivo_id" id="archivo_id" required>
                 <option value="">-- Seleccionar --</option>
                 <?php foreach ($disponibles as $d): ?>
-                    <option value="<?= htmlspecialchars($d['id']) ?>">
-                        <?= htmlspecialchars($d['path'] . '/' . $d['nombre']) ?>
+                    <option value="<?= (int)$d['id'] ?>">
+                        <?= htmlspecialchars($d['ruta'] . '/' . $d['nombre']) ?>
                     </option>
                 <?php endforeach; ?>
             </select>
@@ -191,7 +181,6 @@ require __DIR__ . '/header.php';
                     <th>Nombre</th>
                     <th>Estado</th>
                     <th>Asociados</th>
-                    <th>Pendientes</th>
                     <th>Acción</th>
                 </tr>
             </thead>
@@ -202,13 +191,12 @@ require __DIR__ . '/header.php';
                         <td><?= htmlspecialchars($s['nombre_sucursal']) ?></td>
                         <td>
                             <?php if ($s['enabled'] === 't' || $s['enabled'] === true): ?>
-                                <span class="badge-ok">Activa</span>
+                                <span style="color:green;">Activa</span>
                             <?php else: ?>
-                                <span class="badge-err">Inactiva</span>
+                                <span style="color:red;">Inactiva</span>
                             <?php endif; ?>
                         </td>
                         <td><?= $s['total_asociados'] ?></td>
-                        <td><?= $s['pendientes'] > 0 ? '<span class="badge-warn">' . $s['pendientes'] . '</span>' : '<span class="badge-ok">0</span>' ?></td>
                         <td>
                             <a href="/dashboard/sucursales?sucursal=<?= urlencode($s['id_sucursal']) ?>" role="button" class="secondary outline" style="padding:0.25rem 0.5rem">Ver</a>
                         </td>

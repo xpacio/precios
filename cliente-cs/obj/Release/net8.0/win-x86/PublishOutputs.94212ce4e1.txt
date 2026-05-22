@@ -1,0 +1,3 @@
+/var/www/precios/cliente-cs/publish/win-x86/ClientePrecios.pdb
+/var/www/precios/cliente-cs/publish/win-x86/appsettings.json
+/var/www/precios/cliente-cs/publish/win-x86/ClientePrecios.exe

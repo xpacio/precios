@@ -23,11 +23,12 @@ try {
     $pdo = getDB();
 
     $stmt = $pdo->prepare("
-        SELECT a.id, a.nombre, a.peso, a.md5zip, a.md5flat, a.fecha_carga, a.is_desblinde
+        SELECT a.id, a.ruta, a.nombre, a.peso, a.md5zip, a.md5flat, a.xxh3,
+               a.comprimido, a.status, a.fecha_carga
         FROM archivos a
         JOIN archivo_sucursal asu ON a.id = asu.archivo_id
         WHERE asu.sucursal_id = ? AND asu.enabled = TRUE
-        ORDER BY a.fecha_carga DESC
+        ORDER BY a.nombre
     ");
     $stmt->execute([$idSucursal]);
     $files = $stmt->fetchAll();
@@ -39,12 +40,15 @@ try {
 
     foreach ($files as $f) {
         echo "ID: {$f['id']}\n";
+        echo "RUTA: {$f['ruta']}\n";
         echo "NOMBRE: {$f['nombre']}\n";
         echo "PESO: {$f['peso']}\n";
         echo "MD5ZIP: {$f['md5zip']}\n";
         echo "MD5FLAT: {$f['md5flat']}\n";
+        echo "XXH3: {$f['xxh3']}\n";
+        echo "COMPRIMIDO: " . ($f['comprimido'] === 't' || $f['comprimido'] ? 'SI' : 'NO') . "\n";
+        echo "STATUS: {$f['status']}\n";
         echo "FECHA: {$f['fecha_carga']}\n";
-        echo "DESBLINDE: " . ($f['is_desblinde'] ? 'SI' : 'NO') . "\n";
         echo "---\n";
     }
 
