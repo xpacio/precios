@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-LOG_FILE="/tmp/precios_$(date '+%Y%m').log"
+LOG_FILE="precios_$(date '+%m').log"
 PRECIOS_FILE="/var/www/precios/scripts/precios.txt"
 DEST_DIR="/srv/precios"
 REMOTE="admin@respaldos.camposreyeros.com:/volume1/homes/Precios/MASTERS/Mily-Master230716/"
