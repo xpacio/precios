@@ -20,15 +20,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
     }
 
-    $query = $sucursalId ? '?sucursal=' . urlencode($sucursalId) : '';
-    header('Location: /dashboard/sucursales' . $query);
-    exit;
+    if ($_POST['action'] === 'crear') {
+        $nuevoId = trim($_POST['nuevo_id'] ?? '');
+        $nuevoNombre = trim($_POST['nuevo_nombre'] ?? '');
+        if (!$nuevoId || !$nuevoNombre) {
+            $error = 'ID y nombre son requeridos';
+        } elseif (!preg_match('/^[a-z0-9]+$/', $nuevoId)) {
+            $error = 'ID solo puede contener letras minúsculas y números';
+        } else {
+            try {
+                $pdo->prepare("INSERT INTO sucursales (id_sucursal, nombre_sucursal) VALUES (?, ?)")
+                    ->execute([$nuevoId, $nuevoNombre]);
+                $mensaje = "Sucursal '$nuevoId' creada exitosamente.";
+            } catch (Exception $e) {
+                $error = 'Error: ' . $e->getMessage();
+            }
+        }
+    }
+
+    if ($_POST['action'] === 'crear' && !$error) {
+        header('Location: /dashboard/sucursales?sucursal=' . urlencode($nuevoId));
+        exit;
+    }
+    if ($_POST['action'] !== 'crear') {
+        $query = $sucursalId ? '?sucursal=' . urlencode($sucursalId) : '';
+        header('Location: /dashboard/sucursales' . $query);
+        exit;
+    }
 }
 
 $sucursalDetalle = $_GET['sucursal'] ?? '';
 
+$nuevoIdValue = htmlspecialchars($_POST['nuevo_id'] ?? '');
+$nuevoNombreValue = htmlspecialchars($_POST['nuevo_nombre'] ?? '');
+
 $search = trim($_GET['q'] ?? '');
 $sucursales = [];
+
+$stmtSin = $pdo->query("
+    SELECT s.id_sucursal, s.nombre_sucursal, s.enabled
+    FROM sucursales s
+    WHERE NOT EXISTS (
+        SELECT 1 FROM archivo_sucursal
+        WHERE sucursal_id = s.id_sucursal AND enabled = TRUE
+    )
+    ORDER BY s.id_sucursal
+    LIMIT 10
+");
+$sinArchivos = $stmtSin->fetchAll();
+
 if (strlen($search) >= 2) {
     $stmt = $pdo->prepare("
         SELECT s.id_sucursal, s.nombre_sucursal, s.enabled,
@@ -129,16 +169,78 @@ require __DIR__ . '/header.php';
 
     <?php } ?>
 <?php else: ?>
-    <div style="display:flex;gap:0.75rem;align-items:end;margin-bottom:1rem;">
-        <div style="flex:1;">
-            <label for="q">Buscar sucursal (código o nombre)</label>
-            <input type="text" name="q" id="q" value="<?= htmlspecialchars($search) ?>" minlength="2" placeholder="Escribe al menos 2 caracteres..." autofocus>
+    <nav class="tabs">
+        <ul>
+            <li><a href="#" data-tab="buscar" class="contrast">Buscar sucursales</a></li>
+            <li><a href="#" data-tab="sin-archivos">Sin archivos asociados</a></li>
+            <li><a href="#" data-tab="crear">+ Nueva sucursal</a></li>
+        </ul>
+    </nav>
+
+    <div id="tab-buscar" class="tab-content">
+        <label for="q">Buscar sucursal (código o nombre)</label>
+        <input type="text" name="q" id="q" value="<?= htmlspecialchars($search) ?>" minlength="2" placeholder="Escribe al menos 2 caracteres..." autofocus>
+
+        <div id="sucursales-results">
+            <p>Ingresa al menos 2 caracteres para buscar sucursales.</p>
         </div>
-        <a href="/dashboard/sucursal_crear" role="button" class="secondary outline" style="padding:0.4rem 1rem;white-space:nowrap;">+ Nueva Sucursal</a>
     </div>
 
-    <div id="sucursales-results">
-        <p>Ingresa al menos 2 caracteres para buscar sucursales.</p>
+    <div id="tab-sin-archivos" class="tab-content" style="display:none;">
+        <h2>Sucursales sin archivos asociados</h2>
+        <?php if (empty($sinArchivos)): ?>
+            <p>Todas las sucursales tienen al menos un archivo asociado.</p>
+        <?php else: ?>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($sinArchivos as $s):
+                            $enabled = ($s['enabled'] === 't' || $s['enabled'] === true);
+                        ?>
+                            <tr>
+                                <td><code><?= htmlspecialchars($s['id_sucursal']) ?></code></td>
+                                <td><?= htmlspecialchars($s['nombre_sucursal']) ?></td>
+                                <td><span style="color:<?= $enabled ? 'green">Activa' : 'red">Inactiva' ?></span></td>
+                                <td>
+                                    <a href="/dashboard/archivos?sucursal=<?= urlencode($s['id_sucursal']) ?>" role="button" class="secondary outline" style="padding:0.25rem 0.5rem;">Asociar archivos</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <div id="tab-crear" class="tab-content" style="display:none;">
+        <?php if ($error && $_POST['action'] === 'crear'): ?>
+            <div class="flash flash-error"><?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
+        <article>
+            <header><strong>Nueva Sucursal</strong></header>
+            <form method="POST" action="/dashboard/sucursales">
+                <input type="hidden" name="action" value="crear">
+                <div class="grid">
+                    <label>
+                        ID (solo minúsculas y números)
+                        <input type="text" name="nuevo_id" pattern="[a-z0-9]+" required placeholder="ej. suc001" value="<?= $nuevoIdValue ?>">
+                    </label>
+                    <label>
+                        Nombre
+                        <input type="text" name="nuevo_nombre" required placeholder="ej. Sucursal Centro" value="<?= $nuevoNombreValue ?>">
+                    </label>
+                </div>
+                <button type="submit">Crear Sucursal</button>
+            </form>
+        </article>
     </div>
 
     <script>
@@ -146,6 +248,16 @@ require __DIR__ . '/header.php';
         const input = document.getElementById('q');
         const results = document.getElementById('sucursales-results');
         let timer;
+
+        document.querySelectorAll('.tabs a[data-tab]').forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelectorAll('.tabs a').forEach(function (a) { a.classList.remove('contrast'); });
+                link.classList.add('contrast');
+                document.querySelectorAll('.tab-content').forEach(function (d) { d.style.display = 'none'; });
+                document.getElementById('tab-' + link.dataset.tab).style.display = '';
+            });
+        });
 
         function render(data) {
             if (data.total === 0) {

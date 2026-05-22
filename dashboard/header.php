@@ -6,7 +6,20 @@
     <title><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?> - Precios API</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <style>
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        html { font-size: 100%; }
+        @media (min-width: 1600px) { html { font-size: 112.5%; } }
+        main .container { max-width: min(90%, 1200px); }
+        :root {
+            --pico-spacing: 0.75rem;
+            --pico-block-spacing-vertical: 0.75rem;
+            --pico-block-spacing-horizontal: 0.75rem;
+            --pico-typography-spacing-vertical: 0.5rem;
+            --pico-form-element-spacing-vertical: 0.5rem;
+            --pico-form-element-spacing-horizontal: 0.75rem;
+            --pico-nav-element-spacing-vertical: 0.5rem;
+        }
+        h1, h2, h3, h4 { --pico-typography-spacing-top: 1.5rem; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
         .stat-card { text-align: center; }
         .stat-card h3 { font-size: 2.5rem; margin: 0; }
         nav a[class="contrast"] { text-decoration: underline; }
@@ -23,6 +36,9 @@
         .ausente { opacity: 0.5; }
         .group-header { cursor: pointer; background: #f5f5f5; font-weight: bold; }
         .group-header:hover { background: #e0e0e0; }
+        .tabs { margin-bottom: 0; }
+        .tabs a[data-tab] { cursor: pointer; }
+        .tab-content { margin-top: 1rem; }
     </style>
     <script>
         document.addEventListener('click', function(e) {
