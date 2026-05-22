@@ -22,56 +22,39 @@ try {
     $desaparecidos = 0;
     $sin_cambios = 0;
 
-    $stmt = $pdo->query("SELECT id, path, nombre, md5flat, md5zip, ausente FROM archivos");
+    $stmt = $pdo->query("SELECT id, ruta, nombre, flat, br, status FROM archivos");
     $rows = $stmt->fetchAll();
 
     foreach ($rows as $row) {
-        $fullPath = $PRECIOS_DIR . '/' . $row['path'] . '/' . $row['nombre'];
-        $brPath = $PRECIOS_DIR . '/' . $row['path'] . '/' . pathinfo($row['nombre'], PATHINFO_FILENAME) . '.br';
+        $fullPath = $row['ruta'] . '/' . $row['nombre'];
+        $brPath = $fullPath . '.br';
         $exists = file_exists($fullPath);
-        $wasAusente = ($row['ausente'] === 't' || $row['ausente'] === true);
 
         if (!$exists) {
-            if (!$wasAusente) {
-                $pdo->prepare("UPDATE archivos SET ausente = TRUE, updated_at = NOW() WHERE id = ?")
-                    ->execute([$row['id']]);
-                $desaparecidos++;
-            }
+            $pdo->prepare("UPDATE archivos SET status = 'missing', updated_at = NOW() WHERE id = ?")
+                ->execute([$row['id']]);
+            $desaparecidos++;
             continue;
         }
 
-        $md5flat = substr(md5_file($fullPath), 0, 8);
-        $changed = $wasAusente || $row['md5flat'] !== $md5flat || !file_exists($brPath);
+        $data = file_get_contents($fullPath);
+        $flat = substr(hash('xxh3', $data), 0, 6);
+        $changed = $row['flat'] !== $flat || !file_exists($brPath);
 
         if ($changed) {
-            $flatContent = file_get_contents($fullPath);
-            if ($flatContent === false) throw new RuntimeException("No se pudo leer: $fullPath");
-            $brContent = brotli_compress($flatContent, 11);
-            if (file_put_contents($brPath, $brContent) === false) throw new RuntimeException("No se pudo escribir: $brPath");
-            $md5zip = substr(md5_file($brPath), 0, 8);
+            $brContent = brotli_compress($data, 11);
+            if ($brContent === false) throw new RuntimeException("No se pudo comprimir: $fullPath");
+            file_put_contents($brPath, $brContent);
+            $br = substr(hash('xxh3', $brContent), 0, 6);
             $size = filesize($brPath);
 
-            $pdo->prepare("UPDATE archivos SET ausente = FALSE, md5flat = ?, md5zip = ?, peso = ?, ultimo_cambio = NOW(), updated_at = NOW() WHERE id = ?")
-                ->execute([$md5flat, $md5zip, $size, $row['id']]);
+            $pdo->prepare("UPDATE archivos SET flat = ?, br = ?, peso = ?, status = 'ready', updated_at = NOW() WHERE id = ?")
+                ->execute([$flat, $br, filesize($fullPath), $row['id']]);
 
-            if (!$wasAusente) {
-                $pdo->prepare("UPDATE archivo_sucursal SET sync = FALSE, updated_at = NOW() WHERE archivo_id = ?")
-                    ->execute([$row['id']]);
-                $cambiados++;
-            } else {
-                $aparecidos++;
-            }
+            $pdo->prepare("UPDATE archivo_sucursal SET sync = FALSE, updated_at = NOW() WHERE archivo_id = ?")
+                ->execute([$row['id']]);
+            $cambiados++;
         } else {
-            $size = @filesize($brPath);
-            if ($size === false) {
-                echo "WARN: {$row['nombre']} .br missing, regenerating\n";
-                $flatContent = file_get_contents($fullPath);
-                $brContent = brotli_compress($flatContent, 11);
-                file_put_contents($brPath, $brContent);
-                $size = filesize($brPath);
-            }
-            $pdo->prepare("UPDATE archivos SET peso = ? WHERE id = ? AND peso != ?")
-                ->execute([(int)$size, $row['id'], (int)$size]);
             $sin_cambios++;
         }
     }

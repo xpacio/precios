@@ -20,10 +20,10 @@ try {
     $pdo = getDB();
 
     $stmt = $pdo->prepare("
-        SELECT a.id, a.nombre, a.md5zip, a.md5flat, a.peso, a.ultimo_cambio
+        SELECT a.id, a.nombre, a.flat, a.br, a.peso, a.updated_at AS ultimo_cambio
         FROM archivo_sucursal asu
         JOIN archivos a ON a.id = asu.archivo_id
-        WHERE asu.sucursal_id = ? AND asu.enabled = TRUE AND asu.sync = FALSE AND a.ausente = FALSE
+        WHERE asu.sucursal_id = ? AND asu.enabled = TRUE AND asu.sync = FALSE AND a.status = 'ready'
         ORDER BY a.nombre
     ");
     $stmt->execute([$idSucursal]);
@@ -33,8 +33,8 @@ try {
         return [
             'id' => $f['id'],
             'nombre' => $f['nombre'],
-            'md5zip' => $f['md5zip'],
-            'md5flat' => $f['md5flat'],
+            'flat' => $f['flat'],
+            'br' => $f['br'],
             'peso' => (int)$f['peso'],
             'ultimo_cambio' => $f['ultimo_cambio'],
         ];

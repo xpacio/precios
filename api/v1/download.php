@@ -25,7 +25,7 @@ try {
     $pdo = getDB();
 
     $stmt = $pdo->prepare("
-        SELECT a.id, a.ruta, a.nombre, a.md5zip, a.md5flat, a.status
+        SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.status
         FROM archivos a
         JOIN archivo_sucursal asu ON a.id = asu.archivo_id
         WHERE asu.sucursal_id = ? AND a.nombre = ? AND asu.enabled = TRUE
@@ -59,8 +59,8 @@ try {
 
     header('Content-Encoding: br');
     header('X-Comprimido: brotli');
-    header('X-MD5ZIP: ' . $fileRow['md5zip']);
-    header('X-MD5FLAT: ' . $fileRow['md5flat']);
+    header('X-FLAT: ' . $fileRow['flat']);
+    header('X-BR: ' . $fileRow['br']);
     header('Content-Disposition: attachment; filename="' . $fileRow['nombre'] . '.br"');
     header('Content-Length: ' . filesize($brPath));
 

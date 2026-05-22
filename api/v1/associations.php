@@ -18,11 +18,11 @@ try {
         }
 
         $stmt = $pdo->prepare("
-            SELECT a.id, a.path, a.nombre, a.md5zip, a.peso, a.ausente, asu.sync, asu.created_at AS asociado_desde
+            SELECT a.id, a.ruta, a.nombre, a.flat, a.peso, a.status, asu.sync, asu.created_at AS asociado_desde
             FROM archivo_sucursal asu
             JOIN archivos a ON a.id = asu.archivo_id
             WHERE asu.sucursal_id = ? AND asu.enabled = TRUE
-            ORDER BY a.path, a.nombre
+            ORDER BY a.ruta, a.nombre
         ");
         $stmt->execute([$idSucursal]);
         echo json_encode($stmt->fetchAll(), JSON_PRETTY_PRINT);

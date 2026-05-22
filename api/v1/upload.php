@@ -14,8 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $hNombre    = $_SERVER['HTTP_NOMBRE'] ?? null;
 $hRuta      = $_SERVER['HTTP_RUTA'] ?? null;
-$hMd5Zip    = $_SERVER['HTTP_MD5ZIP'] ?? null;
-$hMd5Flat   = $_SERVER['HTTP_MD5FLAT'] ?? null;
+$hFlat      = $_SERVER['HTTP_FLAT'] ?? null;
+$hBr        = $_SERVER['HTTP_BR'] ?? null;
 $hFecha     = $_SERVER['HTTP_FECHA_ARCHIVO'] ?? null;
 $hDesblinde = $_SERVER['HTTP_IS_DESBLINDE'] ?? '0';
 
@@ -32,10 +32,10 @@ if ($file['error'] !== UPLOAD_ERR_OK) {
     exit;
 }
 
-$calculatedMd5 = substr(md5_file($file['tmp_name']), 0, 8);
-if ($hMd5Zip && strtolower($calculatedMd5) !== strtolower($hMd5Zip)) {
+$calculatedFlat = substr(hash('xxh3', file_get_contents($file['tmp_name'])), 0, 6);
+if ($hFlat && $calculatedFlat !== $hFlat) {
     http_response_code(400);
-    echo "ERROR: Fallo de integridad MD5\nESPERADO: $hMd5Zip\nCALCULADO: $calculatedMd5";
+    echo "ERROR: Fallo de integridad FLAT\nESPERADO: $hFlat\nCALCULADO: $calculatedFlat";
     exit;
 }
 
@@ -50,16 +50,15 @@ try {
 
     $finalFileName = $hNombre ?? $fileName ?? $file['name'];
 
-    $stmt = $pdo->prepare("INSERT INTO archivos (nombre, ruta, peso, md5zip, md5flat, fecha_archivo, is_desblinde, usuario_que_cargo) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id");
+    $stmt = $pdo->prepare("INSERT INTO archivos (nombre, ruta, peso, flat, br, fecha_carga, is_desblinde, n_descargas) VALUES (?, ?, ?, ?, ?, ?, ?, 0) RETURNING id");
     $stmt->execute([
         $finalFileName,
         $hRuta,
         $file['size'],
-        substr($hMd5Zip ?? $calculatedMd5, 0, 8),
-        substr($hMd5Flat ?? '', 0, 8),
+        substr($hFlat ?? $calculatedFlat, 0, 6),
+        substr($hBr ?? '', 0, 6),
         $hFecha ?? date('Y-m-d H:i:s'),
         ($hDesblinde === '1' ? 'true' : 'false'),
-        1
     ]);
 
     $archivoId = $stmt->fetchColumn();

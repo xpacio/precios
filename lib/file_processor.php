@@ -14,8 +14,7 @@ function processFile(string $relPath): array
     $nombre = basename($realPath);
     $peso = filesize($realPath);
     $data = file_get_contents($realPath);
-    $xxh3 = hash('xxh3', $data);
-    $md5zip = substr(md5($data), 0, 8);
+    $flat = substr(hash('xxh3', $data), 0, 6);
     $brPath = $realPath . '.br';
 
     try {
@@ -25,12 +24,12 @@ function processFile(string $relPath): array
         $stmt->execute([$ruta, $nombre]);
         $existing = $stmt->fetch();
 
-        if ($existing && $existing['xxh3'] === $xxh3 && $existing['status'] === 'ready') {
+        if ($existing && trim($existing['xxh3']) === $flat && $existing['status'] === 'ready') {
             return [
                 'status' => 'SKIP',
                 'ruta' => $ruta,
                 'nombre' => $nombre,
-                'xxh3' => $xxh3,
+                'flat' => $flat,
                 'mensaje' => 'Sin cambios'
             ];
         }
@@ -39,11 +38,11 @@ function processFile(string $relPath): array
 
         if ($isNew) {
             $stmt = $pdo->prepare("
-                INSERT INTO archivos (ruta, nombre, peso, md5zip, xxh3, status)
+                INSERT INTO archivos (ruta, nombre, peso, flat, xxh3, status)
                 VALUES (?, ?, ?, ?, ?, 'updating')
                 RETURNING id
             ");
-            $stmt->execute([$ruta, $nombre, $peso, $md5zip, $xxh3]);
+            $stmt->execute([$ruta, $nombre, $peso, $flat, $flat]);
             $archivoId = $stmt->fetchColumn();
         } else {
             $archivoId = $existing['id'];
@@ -68,10 +67,12 @@ function processFile(string $relPath): array
 
         rename($tmpPath, $brPath);
 
+        $br = substr(hash('xxh3', $compressed), 0, 6);
+
         $pdo->prepare("
-            UPDATE archivos SET peso = ?, md5zip = ?, xxh3 = ?, comprimido = TRUE, status = 'ready', updated_at = CURRENT_TIMESTAMP
+            UPDATE archivos SET peso = ?, flat = ?, br = ?, xxh3 = ?, comprimido = TRUE, status = 'ready', updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        ")->execute([$peso, $md5zip, $xxh3, $archivoId]);
+        ")->execute([$peso, $flat, $br, $flat, $archivoId]);
 
         return [
             'status' => 'OK',
@@ -79,8 +80,8 @@ function processFile(string $relPath): array
             'id' => (int)$archivoId,
             'ruta' => $ruta,
             'nombre' => $nombre,
-            'xxh3' => $xxh3,
-            'md5zip' => $md5zip,
+            'flat' => $flat,
+            'br' => $br,
             'peso' => $peso,
             'comprimido' => true
         ];

@@ -23,7 +23,7 @@ try {
     $pdo = getDB();
 
     $stmt = $pdo->prepare("
-        SELECT a.id, a.ruta, a.nombre, a.peso, a.md5zip, a.md5flat, a.xxh3,
+        SELECT a.id, a.ruta, a.nombre, a.peso, a.flat, a.br, a.xxh3,
                a.comprimido, a.status, a.fecha_carga
         FROM archivos a
         JOIN archivo_sucursal asu ON a.id = asu.archivo_id
@@ -43,8 +43,8 @@ try {
         echo "RUTA: {$f['ruta']}\n";
         echo "NOMBRE: {$f['nombre']}\n";
         echo "PESO: {$f['peso']}\n";
-        echo "MD5ZIP: {$f['md5zip']}\n";
-        echo "MD5FLAT: {$f['md5flat']}\n";
+        echo "FLAT: {$f['flat']}\n";
+        echo "BR: {$f['br']}\n";
         echo "XXH3: {$f['xxh3']}\n";
         echo "COMPRIMIDO: " . ($f['comprimido'] === 't' || $f['comprimido'] ? 'SI' : 'NO') . "\n";
         echo "STATUS: {$f['status']}\n";

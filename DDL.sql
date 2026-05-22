@@ -36,9 +36,9 @@ CREATE TABLE archivos (
     ruta VARCHAR(500) NOT NULL,
     nombre VARCHAR(255) NOT NULL,
     peso BIGINT NOT NULL DEFAULT 0,
-    md5zip CHAR(8),
-    md5flat CHAR(8) DEFAULT '',
-    xxh3 CHAR(16),
+    flat CHAR(6) DEFAULT '',
+    br CHAR(6) DEFAULT '',
+    xxh3 CHAR(6),
     comprimido BOOLEAN DEFAULT TRUE,
     status VARCHAR(10) DEFAULT 'ready',
     is_desblinde BOOLEAN DEFAULT FALSE,
@@ -61,7 +61,6 @@ CREATE TABLE archivo_sucursal (
     UNIQUE (sucursal_id, nombre)
 );
 
-CREATE INDEX idx_archivos_md5zip ON archivos (md5zip);
 CREATE INDEX idx_archivo_sucursal_sucursal_id ON archivo_sucursal (sucursal_id);
 CREATE INDEX idx_archivo_sucursal_archivo_id ON archivo_sucursal (archivo_id);
 CREATE UNIQUE INDEX idx_usuarios_nickname ON usuarios (nickname);

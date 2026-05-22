@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.IO.Compression;
+using Microsoft.Extensions.Configuration;
 
 var config = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
@@ -178,9 +179,17 @@ static async Task<bool> DownloadFile(HttpClient http, string sucursal, string fi
         if (!resp.IsSuccessStatusCode)
             return false;
 
+        bool isBr = resp.Content.Headers.ContentEncoding.Contains("br");
+
         await using var stream = await resp.Content.ReadAsStreamAsync();
         await using var fs = File.Create(fileName);
-        await stream.CopyToAsync(fs);
+
+        if (isBr)
+            await using (var br = new BrotliStream(stream, CompressionMode.Decompress))
+                await br.CopyToAsync(fs);
+        else
+            await stream.CopyToAsync(fs);
+
         return true;
     }
     catch
