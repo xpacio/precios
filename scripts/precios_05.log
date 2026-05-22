@@ -5,3 +5,16 @@
 2026-05-22 02:53:19 [RSYNC] >f+++++++++ CHAPALA/ARCERO.DBF
 2026-05-22 02:53:19 [SUCCESS] Sincronización completada
 2026-05-22 02:53:33 [INFO] Iniciando sincronización completa
+2026-05-22 03:15:31 [INFO] Iniciando sincronización completa
+2026-05-22 03:15:38 [ERROR] Rsync falló (código 23)
+2026-05-22 03:16:14 [INFO] Iniciando sincronización completa
+2026-05-22 03:20:44 [INFO] Iniciando sincronización completa
+2026-05-22 03:20:46 [ERROR] Rsync falló (código 23)
+2026-05-22 03:21:31 [INFO] Iniciando sincronización completa
+2026-05-22 03:21:40 [INFO] Iniciando sincronización completa
+2026-05-22 03:23:02 [INFO] Iniciando sincronización completa
+2026-05-22 03:23:42 [INFO] Iniciando sincronización completa
+2026-05-22 03:24:03 [INFO] Iniciando sincronización completa
+2026-05-22 03:24:25 [INFO] Iniciando sincronización completa
+2026-05-22 03:25:53 [INFO] inicia
+2026-05-22 03:25:55 [SUCCESS] termina

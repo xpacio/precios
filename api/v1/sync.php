@@ -1,7 +1,5 @@
 <?php
 
-require_once __DIR__ . '/../../lib/file_processor.php';
-
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -12,43 +10,29 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $startTime = microtime(true);
 
-$scriptPath = __DIR__ . '/../../scripts/precios.sh';
+$baseScripts = realpath(__DIR__ . '/../../scripts');
+$preciosScript = $baseScripts . '/precios.sh';
+$updateScript  = $baseScripts . '/updatePrecios.sh';
 
-$output = [];
-$returnCode = 0;
-$realScript = realpath($scriptPath);
-exec("sudo " . escapeshellarg($realScript), $output, $returnCode);
+$rsyncOutput = [];
+exec("sudo " . escapeshellarg($preciosScript) . " 2>&1", $rsyncOutput, $rsyncCode);
 
-if ($returnCode !== 0 && $returnCode !== 2) {
-    http_response_code(500);
-    echo json_encode([
-        'status' => 'ERROR',
-        'mensaje' => "precios.sh falló (código $returnCode)"
-    ]);
-    exit;
-}
-
-$changedFiles = array_values(array_filter($output, fn($line) => trim($line) !== ''));
-
-$results = [];
-
-foreach ($changedFiles as $relPath) {
-    $results[] = processFile($relPath);
-}
+$upOutput = [];
+$upCode = 0;
+exec("sudo " . escapeshellarg($updateScript) . " 2>&1", $upOutput, $upCode);
 
 $elapsed = round(microtime(true) - $startTime, 2);
 
-$ok = count(array_filter($results, fn($r) => $r['status'] === 'OK'));
-$skip = count(array_filter($results, fn($r) => $r['status'] === 'SKIP'));
-$err = count(array_filter($results, fn($r) => $r['status'] === 'ERROR'));
+$outputText = implode("\n", $rsyncOutput);
+if (!empty($upOutput)) {
+    if (!empty($outputText)) $outputText .= "\n";
+    $outputText .= implode("\n", $upOutput);
+}
 
 echo json_encode([
     'status' => 'OK',
     'elapsed' => $elapsed . 's',
-    'total_files' => count($changedFiles),
-    'inserted_updated' => $ok,
-    'skipped' => $skip,
-    'errors' => $err,
-    'files' => $changedFiles,
-    'results' => $results
+    'rsync_code' => $rsyncCode,
+    'update_code' => $upCode,
+    'output' => $outputText
 ]);

@@ -18,21 +18,8 @@ fi
 
 mkdir -p "$DEST_DIR"
 
-log "INFO" "Iniciando sincronización completa"
+log "INFO" "inicia"
 
-RSYNC_OUTPUT=$(timeout 30 rsync -irtz --files-from="$PRECIOS_FILE" --chmod=Du=rwx,go=rx,Fu=rw,go=r "$REMOTE" "$DEST_DIR" 2>&1) || {
-    ERR=$?
-    log "ERROR" "Rsync falló (código $ERR)"
-    exit 2
-}
-
-while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    log "RSYNC" "$line"
-done <<< "$RSYNC_OUTPUT"
-
-chmod -R o+X "$DEST_DIR"
-
-log "SUCCESS" "Sincronización completada"
-
-echo "$RSYNC_OUTPUT" | grep '^>f' | sed 's/^>f[^ ]* *//' || true
+rsync -irz --files-from="$PRECIOS_FILE" "$REMOTE" "$DEST_DIR"
+log "SUCCESS" "termina"
+exit 0

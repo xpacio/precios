@@ -66,34 +66,17 @@ async function startSync() {
         }
 
         let html = `<div class="flash flash-success">
-            <strong>Sincronización completada</strong> en ${data.elapsed}<br>
-            ${data.inserted_updated} procesados, ${data.skipped} sin cambios, ${data.errors} errores
+            <strong>Sincronización completada</strong> en ${data.elapsed}
         </div>`;
 
-        if (data.total_files > 0) {
-            html += `<h3>Archivos cambiados (${data.total_files})</h3>
-            <div class="table-container"><table>
-                <thead><tr><th>Archivo</th><th>Resultado</th><th>Acción</th></tr></thead>
-                <tbody>`;
-
-            for (const r of data.results) {
-                const statusClass = r.status === 'SKIP' ? 'badge-ok' : r.status === 'OK' ? 'badge-warn' : 'badge-err';
-                html += `<tr>
-                    <td><code>${htmlspecialchars(r.nombre)}</code><br><small>${htmlspecialchars(r.ruta)}</small></td>
-                    <td class="${statusClass}">${r.status}</td>
-                    <td>${r.accion || '-'}</td>
-                </tr>`;
-            }
-
-            html += `</tbody></table></div>`;
+        if (data.output) {
+            html += `<pre style="background:#1e1e1e;color:#d4d4d4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85rem;line-height:1.4;max-height:60vh;overflow-y:auto;">${htmlspecialchars(data.output)}</pre>`;
         } else {
-            html += `<p>No se detectaron cambios en los archivos.</p>`;
+            html += `<p>No se detectaron cambios.</p>`;
         }
 
         results.innerHTML = html;
         results.style.display = 'block';
-
-        setTimeout(() => location.reload(), 5000);
 
     } catch (err) {
         loading.style.display = 'none';
