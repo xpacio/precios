@@ -1,8 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-LOG_FILE="precios_$(date '+%Y%m').log"
-PRECIOS_FILE="precios.txt"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="$SCRIPT_DIR/log_precios_$(date '+%Y%m').log"
+PRECIOS_FILE="$SCRIPT_DIR/archivosFuente.txt"
 DEST_DIR="/srv/precios"
 REMOTE_HOST="admin@respaldos.camposreyeros.com"
 REMOTE_PATH="/volume1/homes/Precios/MASTERS/Mily-Master230716/"
@@ -62,8 +63,9 @@ while IFS= read -r REMOTE_FILE || [[ -n "$REMOTE_FILE" ]]; do
     # Verificar si el archivo existe en el remoto
     if ssh -n "$REMOTE_HOST" "test -f \"$REMOTE_PATH$REMOTE_FILE\""; then
         log "i1" "$REMOTE_FILE"
-        # Transferir el archivo específico
-        if rsync -irz -e ssh "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/" < /dev/null; then
+        SUB_DIR=$(dirname "$REMOTE_FILE")
+        mkdir -p "$DEST_DIR/$SUB_DIR"
+        if rsync -tirz -e ssh "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/$SUB_DIR/" < /dev/null; then
             TRANSFERIDOS=$((TRANSFERIDOS + 1))
             log "i2" "Transferido correctamente: $REMOTE_FILE"
         else
@@ -72,7 +74,7 @@ while IFS= read -r REMOTE_FILE || [[ -n "$REMOTE_FILE" ]]; do
         fi
     else
         NO_ENCONTRADOS=$((NO_ENCONTRADOS + 1))
-        log "e1" "Archivo NO encontrado en remoto: $REMOTE_PATH$REMOTE_FILE"
+        log "e1" "$REMOTE_FILE"
     fi
     # echo "" # Línea en blanco para separar en el log
     

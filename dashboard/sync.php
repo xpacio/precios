@@ -5,7 +5,7 @@ $pageTitle = 'Sincronización';
 $pdo = getDB();
 
 $totalFiles = $pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
-$ready = $pdo->query("SELECT COUNT(*) FROM archivos WHERE status = 'ready'")->fetchColumn();
+$disabled = $pdo->query("SELECT COUNT(*) FROM archivos WHERE enabled = FALSE")->fetchColumn();
 $updating = $pdo->query("SELECT COUNT(*) FROM archivos WHERE status = 'updating'")->fetchColumn();
 $ultimaSync = $pdo->query("SELECT MAX(updated_at) FROM archivos")->fetchColumn();
 
@@ -20,8 +20,8 @@ require __DIR__ . '/header.php';
         <h3><?= number_format($totalFiles) ?></h3>
     </article>
     <article class="stat-card">
-        <header>Listos</header>
-        <h3 style="color: #2e7d32;"><?= number_format($ready) ?></h3>
+        <header>Deshabilitados</header>
+        <h3 style="color: #c62828;"><?= number_format($disabled) ?></h3>
     </article>
     <article class="stat-card">
         <header>Actualizando</header>
@@ -59,18 +59,18 @@ async function startSync() {
 
         loading.style.display = 'none';
 
-        if (data.status !== 'OK') {
-            results.innerHTML = `<div class="flash flash-error">Error: ${data.mensaje || 'Desconocido'}</div>`;
-            results.style.display = 'block';
-            return;
-        }
+        let bannerType = data.status === 'OK' ? 'success' : 'warning';
+        let extra = '';
+        if (data.disabled_count > 0) extra += ` — ${data.disabled_count} archivo(s) deshabilitado(s) por ausencia`;
 
-        let html = `<div class="flash flash-success">
-            <strong>Sincronización completada</strong> en ${data.elapsed}
-        </div>`;
+        let bannerMsg = data.status === 'OK'
+            ? `<strong>Sincronización completada</strong> en ${data.elapsed}${extra}`
+            : `<strong>Sincronización con advertencias</strong> en ${data.elapsed} (código: ${data.exit_code})${extra}`;
+
+        let html = `<div class="flash flash-${bannerType}">${bannerMsg}</div>`;
 
         if (data.output) {
-            html += `<pre style="background:#1e1e1e;color:#d4d4d4;padding:1rem;border-radius:4px;overflow-x:auto;font-size:0.85rem;line-height:1.4;max-height:60vh;overflow-y:auto;">${htmlspecialchars(data.output)}</pre>`;
+            html += renderSyncLog(data.output);
         } else {
             html += `<p>No se detectaron cambios.</p>`;
         }
@@ -85,6 +85,30 @@ async function startSync() {
     } finally {
         btn.disabled = false;
     }
+}
+
+function renderSyncLog(output) {
+    const lines = output.split('\n');
+    let html = '<div style="background:#1e1e1e;padding:1rem;border-radius:4px;font-size:0.85rem;line-height:1.5;max-height:60vh;overflow-y:auto;font-family:monospace;">';
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        let color = '#d4d4d4';
+        let icon = '';
+        if (/\[e1\]/.test(line)) { color = '#f44336'; icon = '✗ '; }
+        else if (/\[e2\]/.test(line)) { color = '#ff9800'; icon = '⚠ '; }
+        else if (/\[i0\]/.test(line)) { color = '#9e9e9e'; }
+        else if (/\[i1\]/.test(line)) { color = '#80cbc4'; }
+        else if (/\[i2\]/.test(line)) { color = '#81c784'; icon = '✓ '; }
+        else if (/\[i3\]/.test(line)) { color = '#64b5f6'; }
+
+        const escaped = htmlspecialchars(line);
+        html += `<div style="color:${color};white-space:pre-wrap;word-break:break-all;">${icon}${escaped}</div>`;
+    }
+    html += '</div>';
+    return html;
 }
 
 function htmlspecialchars(str) {

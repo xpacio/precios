@@ -29,6 +29,7 @@
         .flash { padding: 0.5rem 1rem; border-radius: 4px; margin-bottom: 1rem; }
         .flash-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .flash-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .flash-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
         .badge-ok { color: #2e7d32; font-weight: bold; }
         .badge-warn { color: #e65100; font-weight: bold; }
         .badge-err { color: #c62828; font-weight: bold; }

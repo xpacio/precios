@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
     } else {
         try {
             $stmt = $pdo->prepare("INSERT INTO archivos (ruta, nombre, is_desblinde) VALUES (?, ?, ?)");
-            $stmt->execute([$ruta, $nombre, $is_desblinde]);
+            $stmt->execute([$ruta, $nombre, $is_desblinde ? 't' : 'f']);
             $mensaje = "Archivo '$nombre' registrado exitosamente.";
         } catch (Exception $e) {
             $error = 'Error al registrar archivo: ' . $e->getMessage();
@@ -100,13 +100,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggl
     $enabled = !empty($_POST['enabled']);
     if ($id) {
         try {
-            $pdo->prepare("UPDATE archivos SET enabled = ? WHERE id = ?")->execute([$enabled, $id]);
+            $pdo->prepare("UPDATE archivos SET enabled = ? WHERE id = ?")->execute([$enabled ? 't' : 'f', $id]);
             echo json_encode(['ok' => true]);
         } catch (Exception $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
     } else {
         echo json_encode(['ok' => false, 'error' => 'ID inválido']);
+    }
+    exit;
+}
+
+// === POST: toggle desblinde ===
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggle-desblinde') {
+    header('Content-Type: application/json');
+    $id = (int)($_POST['id'] ?? 0);
+    $is_desblinde = !empty($_POST['is_desblinde']);
+    if ($id) {
+        try {
+            $pdo->prepare("UPDATE archivos SET is_desblinde = ? WHERE id = ?")->execute([$is_desblinde ? 't' : 'f', $id]);
+            echo json_encode(['ok' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    } else {
+        echo json_encode(['ok' => false, 'error' => 'ID inválido']);
+    }
+    exit;
+}
+
+// === POST: editar archivo ===
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'editar') {
+    header('Content-Type: application/json');
+    $id = (int)($_POST['id'] ?? 0);
+    $ruta = trim($_POST['ruta'] ?? '');
+    $nombre = trim($_POST['nombre'] ?? '');
+    if ($id && $ruta !== '' && $nombre !== '') {
+        try {
+            $pdo->prepare("UPDATE archivos SET ruta = ?, nombre = ? WHERE id = ?")->execute([$ruta, $nombre, $id]);
+            echo json_encode(['ok' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    } else {
+        echo json_encode(['ok' => false, 'error' => 'Datos inválidos']);
     }
     exit;
 }
@@ -167,7 +204,7 @@ if ($type === 'archivos-listar' && ($_GET['ajax'] ?? false)) {
     $total = (int)$pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
 
     $stmt = $pdo->prepare("
-        SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.enabled, a.fecha_carga
+        SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.enabled, a.is_desblinde, a.fecha_carga
         FROM archivos a
         ORDER BY a.ruta, a.nombre
         LIMIT ? OFFSET ?
@@ -586,16 +623,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
-                var html = '<table><thead><tr><th>Ruta</th><th>Archivo</th><th>Peso</th><th>Status</th><th>Activo</th><th>Fecha carga</th></tr></thead><tbody>';
+                var html = '<table><thead><tr><th>Ruta</th><th>Archivo</th><th>Peso</th><th>Status</th><th>Desblinde</th><th>Activo</th><th>Fecha carga</th><th>Acción</th></tr></thead><tbody>';
                 for (var i = 0; i < data.results.length; i++) {
                     var f = data.results[i];
                     html += '<tr>';
                     html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
                     html += '<td>' + escapeHtml(f.nombre) + '</td>';
                     html += '<td>' + (f.peso ? escapeHtml(f.peso) : '-') + '</td>';
-                    html += '<td>' + escapeHtml(f.status || '-') + '</td>';
+                    html += '<td>' + (f.status === 'ausente' ? '<span style="color:#e65100;font-weight:bold;">Ausente</span>' : escapeHtml(f.status || '-')) + '</td>';
+                    html += '<td><input type="checkbox" class="toggle-desblinde" data-id="' + f.id + '"' + (f.is_desblinde ? ' checked' : '') + '></td>';
                     html += '<td><input type="checkbox" class="toggle-enabled" data-id="' + f.id + '"' + (f.enabled ? ' checked' : '') + '></td>';
                     html += '<td>' + (f.fecha_carga ? escapeHtml(f.fecha_carga) : '-') + '</td>';
+                    html += '<td><a href="/dashboard/archivo-editar?id=' + f.id + '" class="secondary outline" style="padding:0.2rem 0.5rem;font-size:0.8rem;text-decoration:none;">Editar</a></td>';
                     html += '</tr>';
                 }
                 html += '</tbody></table>';
@@ -637,6 +676,28 @@ document.addEventListener('DOMContentLoaded', function () {
                             });
                     });
                 });
+
+                container.querySelectorAll('.toggle-desblinde').forEach(function (cb) {
+                    cb.addEventListener('change', function () {
+                        var id = this.dataset.id;
+                        var checked = this.checked;
+                        var formData = new FormData();
+                        formData.append('action', 'toggle-desblinde');
+                        formData.append('id', id);
+                        formData.append('is_desblinde', checked ? '1' : '');
+                        fetch('/dashboard/archivos', { method: 'POST', body: formData })
+                            .then(function (r) { return r.json(); })
+                            .then(function (data) {
+                                if (!data.ok) {
+                                    cb.checked = !checked;
+                                }
+                            })
+                            .catch(function () {
+                                cb.checked = !checked;
+                            });
+                    });
+                });
+
             })
             .catch(function () {
                 container.innerHTML = '<p style="color:red">Error al cargar archivos.</p>';
