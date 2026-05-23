@@ -61,11 +61,11 @@ while IFS= read -r REMOTE_FILE || [[ -n "$REMOTE_FILE" ]]; do
     log "INFO" "Procesando archivo [$TOTAL_ARCHIVOS]: $REMOTE_FILE"
     
     # Verificar si el archivo existe en el remoto
-    if ssh "$REMOTE_HOST" "test -f \"$REMOTE_PATH$REMOTE_FILE\""; then
+    if ssh -n "$REMOTE_HOST" "test -f \"$REMOTE_PATH$REMOTE_FILE\""; then
         log "INFO" "Archivo encontrado: $REMOTE_PATH$REMOTE_FILE"
         
         # Transferir el archivo específico
-        if rsync -irz -e ssh "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/"; then
+        if rsync -irz -e ssh "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/" < /dev/null; then
             TRANSFERIDOS=$((TRANSFERIDOS + 1))
             log "SUCCESS" "Transferido correctamente: $REMOTE_FILE"
         else
