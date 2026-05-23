@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-LOG_FILE="log_Precios_$(date '+%Y%m').log"
-PRECIOS_FILE="archivosFuente.txt"
+LOG_FILE="precios_$(date '+%Y%m').log"
+PRECIOS_FILE="precios.txt"
 DEST_DIR="/srv/precios"
 REMOTE_HOST="admin@respaldos.camposreyeros.com"
 REMOTE_PATH="/volume1/homes/Precios/MASTERS/Mily-Master230716/"
@@ -58,26 +58,23 @@ while IFS= read -r REMOTE_FILE || [[ -n "$REMOTE_FILE" ]]; do
     REMOTE_FILE=$(echo "$REMOTE_FILE" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
     
     TOTAL_ARCHIVOS=$((TOTAL_ARCHIVOS + 1))
-    log "INFO" "Procesando archivo [$TOTAL_ARCHIVOS]: $REMOTE_FILE"
-    
+    log "i0" "$REMOTE_PATH$REMOTE_FILE"
     # Verificar si el archivo existe en el remoto
     if ssh -n "$REMOTE_HOST" "test -f \"$REMOTE_PATH$REMOTE_FILE\""; then
-        log "INFO" "Archivo encontrado: $REMOTE_PATH$REMOTE_FILE"
-        
+        log "i1" "$REMOTE_FILE"
         # Transferir el archivo específico
         if rsync -irz -e ssh "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/" < /dev/null; then
             TRANSFERIDOS=$((TRANSFERIDOS + 1))
-            log "SUCCESS" "Transferido correctamente: $REMOTE_FILE"
+            log "i2" "Transferido correctamente: $REMOTE_FILE"
         else
             ERRORES=$((ERRORES + 1))
-            log "ERROR" "Falló la transferencia de: $REMOTE_FILE (código: $?)"
+            log "e2" "Falló la transferencia de: $REMOTE_FILE (código: $?)"
         fi
     else
         NO_ENCONTRADOS=$((NO_ENCONTRADOS + 1))
-        log "ERROR" "Archivo NO encontrado en remoto: $REMOTE_PATH$REMOTE_FILE"
+        log "e1" "Archivo NO encontrado en remoto: $REMOTE_PATH$REMOTE_FILE"
     fi
-    
-    echo "" # Línea en blanco para separar en el log
+    # echo "" # Línea en blanco para separar en el log
     
 done < "$PRECIOS_FILE"
 
@@ -85,13 +82,13 @@ END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
 # Mostrar resumen final
-log "INFO" "========== RESUMEN FINAL =========="
-log "INFO" "Total archivos procesados: $TOTAL_ARCHIVOS"
-log "INFO" "Transferidos exitosamente: $TRANSFERIDOS"
-log "INFO" "No encontrados en remoto: $NO_ENCONTRADOS"
-log "INFO" "Errores en transferencia: $ERRORES"
-log "INFO" "Tiempo total: ${DURATION} segundos"
-log "SUCCESS" "Procesamiento completado"
+log "i3" "========== RESUMEN FINAL =========="
+log "i3" "Total archivos procesados: $TOTAL_ARCHIVOS"
+log "i3" "Transferidos exitosamente: $TRANSFERIDOS"
+log "i3" "No encontrados en remoto: $NO_ENCONTRADOS"
+log "i3" "Errores en transferencia: $ERRORES"
+log "i3" "Tiempo total: ${DURATION} segundos"
+
 
 # Salir con código apropiado
 if [[ $ERRORES -gt 0 ]] || [[ $NO_ENCONTRADOS -gt 0 ]]; then
