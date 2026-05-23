@@ -48,6 +48,13 @@ if ! ssh -q -o BatchMode=yes -o ConnectTimeout=2 "$REMOTE_HOST" exit; then
     exit 1
 fi
 
+# === Fast mode: rsync --files-from ===
+if [[ "${1:-}" == "--files-from" ]]; then
+    log "INFO" "Modo rápido: rsync --files-from"
+    rsync -tirvz --files-from="$PRECIOS_FILE" -e ssh "$REMOTE_HOST:$REMOTE_PATH" "$DEST_DIR/" < /dev/null
+    exit $?
+fi
+
 # Leer el archivo línea por línea y procesar cada archivo
 while IFS= read -r REMOTE_FILE || [[ -n "$REMOTE_FILE" ]]; do
     # Saltar líneas vacías
