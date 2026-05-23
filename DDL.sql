@@ -42,6 +42,7 @@ CREATE TABLE archivos (
     comprimido BOOLEAN DEFAULT TRUE,
     status VARCHAR(10) DEFAULT 'ready',
     is_desblinde BOOLEAN DEFAULT FALSE,
+    enabled BOOLEAN DEFAULT FALSE,
     n_descargas INT DEFAULT 0,
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -3,6 +3,8 @@
 $pageTitle = 'Archivos';
 
 $pdo = getDB();
+$mensaje = '';
+$error = '';
 
 // === POST: relacionar archivos con sucursales ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'relacionar') {
@@ -66,6 +68,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'elimi
     exit;
 }
 
+// === POST: registrar archivo ===
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'registrar') {
+    $ruta = trim($_POST['ruta'] ?? '');
+    $nombre = trim($_POST['nombre'] ?? '');
+    $is_desblinde = !empty($_POST['is_desblinde']);
+
+    if ($ruta === '' || $nombre === '') {
+        $error = 'Ruta y nombre son obligatorios.';
+    } else {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO archivos (ruta, nombre, is_desblinde) VALUES (?, ?, ?)");
+            $stmt->execute([$ruta, $nombre, $is_desblinde]);
+            $mensaje = "Archivo '$nombre' registrado exitosamente.";
+        } catch (Exception $e) {
+            $error = 'Error al registrar archivo: ' . $e->getMessage();
+        }
+    }
+    if (!$error) {
+        header('Location: /dashboard/archivos?tab=registrar');
+        exit;
+    }
+}
+
+$showRegistrar = isset($_GET['tab']) && $_GET['tab'] === 'registrar';
+
+// === POST: toggle enabled ===
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggle-enabled') {
+    header('Content-Type: application/json');
+    $id = (int)($_POST['id'] ?? 0);
+    $enabled = !empty($_POST['enabled']);
+    if ($id) {
+        try {
+            $pdo->prepare("UPDATE archivos SET enabled = ? WHERE id = ?")->execute([$enabled, $id]);
+            echo json_encode(['ok' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    } else {
+        echo json_encode(['ok' => false, 'error' => 'ID inválido']);
+    }
+    exit;
+}
+
 // === AJAX: search archivos (min 2 chars, for eliminar tab) ===
 $type = $_GET['type'] ?? 'archivos';
 
@@ -113,6 +158,28 @@ if ($type === 'sucursales' && ($_GET['ajax'] ?? false)) {
     exit;
 }
 
+// === AJAX: list all archivos with pagination ===
+if ($type === 'archivos-listar' && ($_GET['ajax'] ?? false)) {
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $perPage = 25;
+    $offset = ($page - 1) * $perPage;
+
+    $total = (int)$pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
+
+    $stmt = $pdo->prepare("
+        SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.enabled, a.fecha_carga
+        FROM archivos a
+        ORDER BY a.ruta, a.nombre
+        LIMIT ? OFFSET ?
+    ");
+    $stmt->execute([$perPage, $offset]);
+    $rows = $stmt->fetchAll();
+
+    header('Content-Type: application/json');
+    echo json_encode(['results' => $rows, 'total' => $total, 'page' => $page, 'perPage' => $perPage]);
+    exit;
+}
+
 // === AJAX: search archivos ===
 $search = trim($_GET['q'] ?? '');
 $results = [];
@@ -141,10 +208,19 @@ require __DIR__ . '/header.php';
 
 <h1>Archivos</h1>
 
+<?php if ($mensaje): ?>
+    <div class="flash flash-success"><?= htmlspecialchars($mensaje) ?></div>
+<?php endif; ?>
+<?php if ($error): ?>
+    <div class="flash flash-error"><?= htmlspecialchars($error) ?></div>
+<?php endif; ?>
+
 <nav class="tabs">
     <ul>
         <li><a href="#" data-tab="asociar" class="contrast">Asociar</a></li>
         <li><a href="#" data-tab="eliminar">Eliminar archivo</a></li>
+        <li><a href="#" data-tab="listar">Listar archivos</a></li>
+        <li><a href="#" data-tab="registrar">Registrar archivo</a></li>
     </ul>
 </nav>
 
@@ -198,6 +274,38 @@ require __DIR__ . '/header.php';
     <div id="mensaje-del" style="display:none;margin-bottom:1rem;"></div>
 </div>
 
+<div id="tab-listar" class="tab-content" style="display:none;">
+    <div id="listar-info" style="margin-bottom:0.5rem;"></div>
+    <div class="table-container" id="listar-table-container">
+        <p>Cargando archivos...</p>
+    </div>
+    <div id="listar-pagination" style="display:flex;gap:0.5rem;justify-content:center;margin-top:1rem;"></div>
+</div>
+
+<div id="tab-registrar" class="tab-content" style="display:none;">
+    <article>
+        <header><strong>Registrar Nuevo Archivo</strong></header>
+        <form method="POST" action="/dashboard/archivos">
+            <input type="hidden" name="action" value="registrar">
+            <div class="grid">
+                <label>
+                    Ruta
+                    <input type="text" name="ruta" required placeholder="/srv/precios/...">
+                </label>
+                <label>
+                    Nombre
+                    <input type="text" name="nombre" required placeholder="archivo.pdf">
+                </label>
+                <label>
+                    <input type="checkbox" name="is_desblinde" value="1">
+                    Es desblinde
+                </label>
+            </div>
+            <button type="submit">Registrar Archivo</button>
+        </form>
+    </article>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // === Tabs ===
@@ -210,6 +318,13 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('tab-' + link.dataset.tab).style.display = '';
         });
     });
+
+    // Auto-activate tab from URL param
+    var tabParam = new URLSearchParams(window.location.search).get('tab');
+    if (tabParam) {
+        var tabLink = document.querySelector('.tabs a[data-tab="' + tabParam + '"]');
+        if (tabLink) tabLink.click();
+    }
 
     // === Asociar tab ===
     const input = document.getElementById('q');
@@ -447,6 +562,91 @@ document.addEventListener('DOMContentLoaded', function () {
         clearTimeout(delTimer);
         delTimer = setTimeout(searchDelArchivos, 300);
     });
+
+    // === Listar tab ===
+    let listarPage = 1;
+
+    function loadListar(page) {
+        listarPage = page;
+        const container = document.getElementById('listar-table-container');
+        const info = document.getElementById('listar-info');
+        const pagination = document.getElementById('listar-pagination');
+
+        container.innerHTML = '<p>Cargando...</p>';
+
+        fetch('?type=archivos-listar&page=' + page + '&ajax=1')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var totalPages = Math.ceil(data.total / data.perPage);
+                info.innerHTML = '<p>Total: <strong>' + data.total + '</strong> archivos (pág. ' + data.page + ' de ' + totalPages + ')</p>';
+
+                if (data.total === 0) {
+                    container.innerHTML = '<p>No hay archivos.</p>';
+                    pagination.innerHTML = '';
+                    return;
+                }
+
+                var html = '<table><thead><tr><th>Ruta</th><th>Archivo</th><th>Peso</th><th>Status</th><th>Activo</th><th>Fecha carga</th></tr></thead><tbody>';
+                for (var i = 0; i < data.results.length; i++) {
+                    var f = data.results[i];
+                    html += '<tr>';
+                    html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
+                    html += '<td>' + escapeHtml(f.nombre) + '</td>';
+                    html += '<td>' + (f.peso ? escapeHtml(f.peso) : '-') + '</td>';
+                    html += '<td>' + escapeHtml(f.status || '-') + '</td>';
+                    html += '<td><input type="checkbox" class="toggle-enabled" data-id="' + f.id + '"' + (f.enabled ? ' checked' : '') + '></td>';
+                    html += '<td>' + (f.fecha_carga ? escapeHtml(f.fecha_carga) : '-') + '</td>';
+                    html += '</tr>';
+                }
+                html += '</tbody></table>';
+                container.innerHTML = html;
+
+                var pagHtml = '';
+                if (data.page > 1) {
+                    pagHtml += '<button class="secondary outline" data-page="' + (data.page - 1) + '" style="padding:0.25rem 0.75rem;">&laquo; Anterior</button>';
+                }
+                pagHtml += '<span style="padding:0.25rem 0.75rem;">Pág. ' + data.page + ' de ' + totalPages + '</span>';
+                if (data.page < totalPages) {
+                    pagHtml += '<button class="secondary outline" data-page="' + (data.page + 1) + '" style="padding:0.25rem 0.75rem;">Siguiente &raquo;</button>';
+                }
+                pagination.innerHTML = pagHtml;
+
+                pagination.querySelectorAll('button').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        loadListar(parseInt(this.dataset.page));
+                    });
+                });
+
+                container.querySelectorAll('.toggle-enabled').forEach(function (cb) {
+                    cb.addEventListener('change', function () {
+                        var id = this.dataset.id;
+                        var enabled = this.checked;
+                        var formData = new FormData();
+                        formData.append('action', 'toggle-enabled');
+                        formData.append('id', id);
+                        formData.append('enabled', enabled ? '1' : '');
+                        fetch('/dashboard/archivos', { method: 'POST', body: formData })
+                            .then(function (r) { return r.json(); })
+                            .then(function (data) {
+                                if (!data.ok) {
+                                    cb.checked = !enabled;
+                                }
+                            })
+                            .catch(function () {
+                                cb.checked = !enabled;
+                            });
+                    });
+                });
+            })
+            .catch(function () {
+                container.innerHTML = '<p style="color:red">Error al cargar archivos.</p>';
+            });
+    }
+
+    document.querySelector('.tabs a[data-tab="listar"]').addEventListener('click', function () {
+        loadListar(1);
+    });
+
 });
 </script>
 
