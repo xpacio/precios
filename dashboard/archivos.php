@@ -239,19 +239,38 @@ if ($type === 'archivos-listar' && ($_GET['ajax'] ?? false)) {
     $perPage = 25;
     $offset = ($page - 1) * $perPage;
     $sort = match($_GET['sort'] ?? 'ruta') { 'fecha_archivo' => 'fecha_archivo', default => 'ruta' };
+    $q = trim($_GET['q'] ?? '');
 
-    $total = (int)$pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
+    if ($q !== '' && strlen($q) >= 2) {
+        $like = '%' . $q . '%';
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM archivos WHERE ruta ILIKE ? OR nombre ILIKE ?");
+        $countStmt->execute([$like, $like]);
+        $total = (int)$countStmt->fetchColumn();
+    } else {
+        $q = '';
+        $total = (int)$pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
+    }
 
     $orderBy = ($sort === 'fecha_archivo') ? 'a.fecha_archivo DESC NULLS LAST' : 'a.ruta, a.nombre';
 
-    $stmt = $pdo->prepare("
+    $whereClause = $q ? "WHERE a.ruta ILIKE ? OR a.nombre ILIKE ?" : "";
+    $sql = "
         SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.enabled, a.is_desblinde, a.fecha_carga,
                a.flat, a.br, a.compr_pct, a.fecha_archivo
         FROM archivos a
+        {$whereClause}
         ORDER BY {$orderBy}
         LIMIT ? OFFSET ?
-    ");
-    $stmt->execute([$perPage, $offset]);
+    ";
+
+    if ($q) {
+        $like = '%' . $q . '%';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$like, $like, $perPage, $offset]);
+    } else {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$perPage, $offset]);
+    }
     $rows = $stmt->fetchAll();
 
     header('Content-Type: application/json');
@@ -304,7 +323,12 @@ require __DIR__ . '/header.php';
 </nav>
 
 <div id="tab-listar" class="tab-content">
-    <div id="listar-info" style="margin-bottom:0.5rem;"></div>
+    <div id="listar-info" style="margin-bottom:0.5rem;">
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+            <span id="listar-total"></span>
+            <input type="text" id="q-listar" minlength="2" placeholder="Buscar archivo (nombre o ruta)..." style="max-width:300px;">
+        </div>
+    </div>
     <div class="table-container" id="listar-table-container">
         <p>Cargando archivos...</p>
     </div>
@@ -359,14 +383,6 @@ require __DIR__ . '/header.php';
     </div>
 
     <div id="mensaje-del" style="display:none;margin-bottom:1rem;"></div>
-</div>
-
-<div id="tab-listar" class="tab-content" style="display:none;">
-    <div id="listar-info" style="margin-bottom:0.5rem;"></div>
-    <div class="table-container" id="listar-table-container">
-        <p>Cargando archivos...</p>
-    </div>
-    <div id="listar-pagination" style="display:flex;gap:0.5rem;justify-content:center;margin-top:1rem;"></div>
 </div>
 
 <div id="tab-registrar" class="tab-content" style="display:none;">
@@ -459,7 +475,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const checked = sucursalAuto && s.id_sucursal === sucursalAuto ? ' checked' : '';
             html += '<tr>';
             html += '<td><code>' + escapeHtml(s.id_sucursal) + '</code></td>';
-            html += '<td>' + escapeHtml(s.nombre_sucursal) + '</td>';
+            html += '<td><a href="/dashboard/sucursales?sucursal=' + encodeURIComponent(s.id_sucursal) + '">' + escapeHtml(s.nombre_sucursal) + '</a></td>';
             html += '<td><input type="checkbox" class="suc-check" value="' + escapeHtml(s.id_sucursal) + '"' + checked + '></td>';
             html += '</tr>';
         }
@@ -672,19 +688,22 @@ document.addEventListener('DOMContentLoaded', function () {
         const container = document.getElementById('listar-table-container');
         const info = document.getElementById('listar-info');
         const pagination = document.getElementById('listar-pagination');
+        const q = document.getElementById('q-listar').value.trim();
 
         container.innerHTML = '<p>Cargando...</p>';
 
-        fetch('?type=archivos-listar&sort=' + encodeURIComponent(listarSort) + '&page=' + page + '&ajax=1')
+        var url = '?type=archivos-listar&sort=' + encodeURIComponent(listarSort) + '&page=' + page + '&ajax=1';
+        if (q.length >= 2) url += '&q=' + encodeURIComponent(q);
+
+        fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 var totalPages = Math.ceil(data.total / data.perPage);
                 var nextSort = (listarSort === 'fecha_archivo') ? 'ruta' : 'fecha_archivo';
                 var nextLabel = (nextSort === 'fecha_archivo') ? 'Modificado' : 'Ruta';
-                info.innerHTML = '<p style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">' +
-                    '<span>Total: <strong>' + data.total + '</strong> archivos (pág. ' + data.page + ' de ' + totalPages + ')</span>' +
-                    '<button class="secondary outline" id="btn-toggle-sort" style="padding:0.2rem 0.6rem;font-size:0.8rem;" type="button">Ordenar por ' + nextLabel + ' ▾</button>' +
-                    '</p>';
+                document.getElementById('listar-total').innerHTML =
+                    'Total: <strong>' + data.total + '</strong> archivos (pág. ' + data.page + ' de ' + totalPages + ') ' +
+                    '<button class="secondary outline" id="btn-toggle-sort" style="padding:0.2rem 0.6rem;font-size:0.8rem;vertical-align:middle;" type="button">Ordenar por ' + nextLabel + ' ▾</button>';
 
                 if (data.total === 0) {
                     container.innerHTML = '<p>No hay archivos.</p>';
@@ -788,6 +807,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.querySelector('.tabs a[data-tab="listar"]').addEventListener('click', function () {
         loadListar(1);
+    });
+
+    let listarSearchTimer;
+    document.getElementById('q-listar').addEventListener('input', function () {
+        clearTimeout(listarSearchTimer);
+        listarSearchTimer = setTimeout(function () { loadListar(1); }, 300);
     });
 
     // === Registrar AJAX ===
