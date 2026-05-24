@@ -57,8 +57,15 @@ if ! ssh "$REMOTE_HOST" "test -f \"$REMOTE_PATH$REMOTE_FILE\""; then
     exit 1
 fi
 
+# Crear subdirectorio local si es necesario
+SUB_DIR=$(dirname "$REMOTE_FILE")
+if [[ "$SUB_DIR" != "." ]]; then
+    mkdir -p "$DEST_DIR/$SUB_DIR"
+fi
+
 # Transferir el archivo específico con timeout de 10 segundos
-if rsync -irz -e ssh --timeout=10 "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/"; then
+if rsync -iz -e ssh --timeout=10 "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/$SUB_DIR/"; then
+    chown -R www-data:www-data "$DEST_DIR/$SUB_DIR" 2>/dev/null || true
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
     log "SUCCESS" "Transferencia completada en ${DURATION} segundos"

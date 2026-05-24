@@ -45,6 +45,8 @@ CREATE TABLE archivos (
     enabled BOOLEAN DEFAULT FALSE,
     n_descargas INT DEFAULT 0,
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_archivo TIMESTAMP,
+    compr_pct INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (ruta, nombre)

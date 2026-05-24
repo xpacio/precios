@@ -3,6 +3,7 @@
 $pageTitle = 'Archivos';
 
 $pdo = getDB();
+require_once __DIR__ . '/../lib/sync_helper.php';
 $mensaje = '';
 $error = '';
 
@@ -73,22 +74,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
     $ruta = trim($_POST['ruta'] ?? '');
     $nombre = trim($_POST['nombre'] ?? '');
     $is_desblinde = !empty($_POST['is_desblinde']);
+    $isAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+
+    $resp = ['status' => 'OK', 'mensaje' => '', 'log' => []];
 
     if ($ruta === '' || $nombre === '') {
-        $error = 'Ruta y nombre son obligatorios.';
+        $resp['status'] = 'ERROR';
+        $resp['mensaje'] = 'Ruta y nombre son obligatorios.';
     } else {
-        try {
-            $stmt = $pdo->prepare("INSERT INTO archivos (ruta, nombre, is_desblinde) VALUES (?, ?, ?)");
-            $stmt->execute([$ruta, $nombre, $is_desblinde ? 't' : 'f']);
-            $mensaje = "Archivo '$nombre' registrado exitosamente.";
-        } catch (Exception $e) {
-            $error = 'Error al registrar archivo: ' . $e->getMessage();
+        $relPath = $ruta . '/' . $nombre;
+        $getOneScript = realpath(__DIR__ . '/../scripts/getOne.sh');
+        $cmd = "sudo " . escapeshellarg($getOneScript) . " " . escapeshellarg($relPath) . " 2>&1";
+        exec($cmd, $syncOutput, $syncCode);
+        $resp['log'] = $syncOutput;
+
+        if ($syncCode !== 0) {
+            $resp['status'] = 'ERROR';
+            $resp['mensaje'] = "Archivo no encontrado en el origen remoto: $relPath";
+        } else {
+            try {
+                $is_desblinde_val = $is_desblinde ? 't' : 'f';
+                $stmt = $pdo->prepare("
+                    INSERT INTO archivos (ruta, nombre, enabled, is_desblinde)
+                    VALUES (?, ?, TRUE, ?)
+                    ON CONFLICT (ruta, nombre) DO UPDATE
+                    SET enabled = TRUE, is_desblinde = EXCLUDED.is_desblinde, status = 'updating'
+                ");
+                $stmt->execute([$ruta, $nombre, $is_desblinde_val]);
+                $result = processAndCompressFile($ruta, $nombre);
+                if ($result['status'] === 'OK') {
+                    $resp['mensaje'] = "Archivo '$nombre' registrado, sincronizado y comprimido exitosamente.";
+                } else {
+                    $resp['mensaje'] = "Archivo '$nombre' registrado (sin cambios en contenido).";
+                }
+                $resp['row_count'] = $stmt->rowCount();
+            } catch (Exception $e) {
+                $resp['status'] = 'ERROR';
+                $resp['mensaje'] = 'Error al registrar archivo: ' . $e->getMessage();
+            }
         }
     }
-    if (!$error) {
+
+    if ($isAjax) {
+        header('Content-Type: application/json');
+        echo json_encode($resp);
+        exit;
+    }
+
+    if ($resp['status'] === 'OK') {
+        $mensaje = $resp['mensaje'];
         header('Location: /dashboard/archivos?tab=registrar');
         exit;
     }
+    $error = $resp['mensaje'];
 }
 
 $showRegistrar = isset($_GET['tab']) && $_GET['tab'] === 'registrar';
@@ -159,7 +197,7 @@ if ($type === 'archivos-eliminar' && ($_GET['ajax'] ?? false)) {
         exit;
     }
     $stmt = $pdo->prepare("
-        SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.fecha_carga
+        SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.fecha_archivo
         FROM archivos a
         WHERE a.ruta ILIKE ? OR a.nombre ILIKE ?
         ORDER BY a.ruta, a.nombre
@@ -200,20 +238,24 @@ if ($type === 'archivos-listar' && ($_GET['ajax'] ?? false)) {
     $page = max(1, (int)($_GET['page'] ?? 1));
     $perPage = 25;
     $offset = ($page - 1) * $perPage;
+    $sort = match($_GET['sort'] ?? 'ruta') { 'fecha_archivo' => 'fecha_archivo', default => 'ruta' };
 
     $total = (int)$pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
 
+    $orderBy = ($sort === 'fecha_archivo') ? 'a.fecha_archivo DESC NULLS LAST' : 'a.ruta, a.nombre';
+
     $stmt = $pdo->prepare("
-        SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.enabled, a.is_desblinde, a.fecha_carga
+        SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.enabled, a.is_desblinde, a.fecha_carga,
+               a.flat, a.br, a.compr_pct, a.fecha_archivo
         FROM archivos a
-        ORDER BY a.ruta, a.nombre
+        ORDER BY {$orderBy}
         LIMIT ? OFFSET ?
     ");
     $stmt->execute([$perPage, $offset]);
     $rows = $stmt->fetchAll();
 
     header('Content-Type: application/json');
-    echo json_encode(['results' => $rows, 'total' => $total, 'page' => $page, 'perPage' => $perPage]);
+    echo json_encode(['results' => $rows, 'total' => $total, 'page' => $page, 'perPage' => $perPage, 'sort' => $sort]);
     exit;
 }
 
@@ -222,7 +264,7 @@ $search = trim($_GET['q'] ?? '');
 $results = [];
 
 if (strlen($search) >= 3) {
-    $sql = "SELECT a.id, a.ruta, a.nombre, a.peso, a.flat, a.br, a.xxh3, a.comprimido, a.status, a.fecha_carga
+    $sql = "SELECT a.id, a.ruta, a.nombre, a.peso, a.flat, a.br, a.xxh3, a.comprimido, a.status, a.fecha_archivo
             FROM archivos a
             WHERE a.ruta ILIKE ? OR a.nombre ILIKE ?
             ORDER BY a.ruta, a.nombre
@@ -254,14 +296,22 @@ require __DIR__ . '/header.php';
 
 <nav class="tabs">
     <ul>
-        <li><a href="#" data-tab="asociar" class="contrast">Asociar</a></li>
+        <li><a href="#" data-tab="listar" class="contrast">Listar archivos</a></li>
+        <li><a href="#" data-tab="asociar">Asociar</a></li>
         <li><a href="#" data-tab="eliminar">Eliminar archivo</a></li>
-        <li><a href="#" data-tab="listar">Listar archivos</a></li>
         <li><a href="#" data-tab="registrar">Registrar archivo</a></li>
     </ul>
 </nav>
 
-<div id="tab-asociar" class="tab-content">
+<div id="tab-listar" class="tab-content">
+    <div id="listar-info" style="margin-bottom:0.5rem;"></div>
+    <div class="table-container" id="listar-table-container">
+        <p>Cargando archivos...</p>
+    </div>
+    <div id="listar-pagination" style="display:flex;gap:0.5rem;justify-content:center;margin-top:1rem;"></div>
+</div>
+
+<div id="tab-asociar" class="tab-content" style="display:none;">
     <?php $sucursalFilter = trim($_GET['sucursal'] ?? ''); ?>
     <?php if ($sucursalFilter): ?>
         <p><a href="/dashboard/sucursales?sucursal=<?= urlencode($sucursalFilter) ?>" class="secondary">&larr; <?= htmlspecialchars($sucursalFilter) ?></a></p>
@@ -322,16 +372,16 @@ require __DIR__ . '/header.php';
 <div id="tab-registrar" class="tab-content" style="display:none;">
     <article>
         <header><strong>Registrar Nuevo Archivo</strong></header>
-        <form method="POST" action="/dashboard/archivos">
+        <form id="registrar-form" method="POST" action="/dashboard/archivos">
             <input type="hidden" name="action" value="registrar">
             <div class="grid">
                 <label>
                     Ruta
-                    <input type="text" name="ruta" required placeholder="/srv/precios/...">
+                    <input type="text" name="ruta" required placeholder="CHAPAS/ENVIAR">
                 </label>
                 <label>
                     Nombre
-                    <input type="text" name="nombre" required placeholder="archivo.pdf">
+                    <input type="text" name="nombre" required placeholder="LISTA.CDX">
                 </label>
                 <label>
                     <input type="checkbox" name="is_desblinde" value="1">
@@ -340,6 +390,9 @@ require __DIR__ . '/header.php';
             </div>
             <button type="submit">Registrar Archivo</button>
         </form>
+        <div id="registrar-mensaje" style="display:none;margin-top:1rem;"></div>
+        <progress id="registrar-progress" style="display:none;margin-top:1rem;width:100%;"></progress>
+        <pre id="registrar-log" style="display:none;margin-top:0.5rem;background:var(--card-background-color);padding:0.75rem;border-radius:var(--border-radius);font-size:0.8rem;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;"></pre>
     </article>
 </div>
 
@@ -356,12 +409,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // Auto-activate tab from URL param
+    // Auto-activate tab from URL param, else default to listar
     var tabParam = new URLSearchParams(window.location.search).get('tab');
-    if (tabParam) {
-        var tabLink = document.querySelector('.tabs a[data-tab="' + tabParam + '"]');
-        if (tabLink) tabLink.click();
-    }
+    var defaultTab = document.querySelector('.tabs a[data-tab="' + (tabParam || 'listar') + '"]');
+    if (defaultTab) defaultTab.click();
 
     // === Asociar tab ===
     const input = document.getElementById('q');
@@ -377,6 +428,16 @@ document.addEventListener('DOMContentLoaded', function () {
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    function fmtFecha(ts) {
+        if (!ts) return '-';
+        var parts = ts.split(' ');
+        if (parts.length !== 2) return ts;
+        var d = parts[0].split('-');
+        var t = parts[1].split(':');
+        if (d.length < 3 || t.length < 2) return ts;
+        return d[1] + '-' + d[2] + ' ' + t[0] + ':' + t[1];
     }
 
     function mostrarMensaje(tipo, texto) {
@@ -413,12 +474,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         let html = '<p>' + data.total + ' resultado(s) (máx. 50).</p>';
         html += '<p style="margin-bottom:0.5rem;"><button class="secondary outline" id="btn-select-all" style="padding:0.25rem 0.75rem;font-size:0.85rem;" type="button">Seleccionar todos</button></p>';
-        html += '<div class="table-container"><table><thead><tr><th>Ruta</th><th>Archivo</th><th>Sel.</th></tr></thead><tbody>';
+        html += '<div class="table-container"><table><thead><tr><th>Ruta</th><th>Archivo</th><th>Modificado</th><th>Sel.</th></tr></thead><tbody>';
 
         for (const f of data.results) {
             html += '<tr>';
             html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
             html += '<td>' + escapeHtml(f.nombre) + '</td>';
+            html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
             html += '<td><input type="checkbox" class="arch-check" value="' + f.id + '"></td>';
             html += '</tr>';
         }
@@ -532,13 +594,14 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         let html = '<p>' + data.total + ' resultado(s) (máx. 50).</p>';
-        html += '<div class="table-container"><table><thead><tr><th>Ruta</th><th>Archivo</th><th>Peso</th><th>Status</th><th>Acción</th></tr></thead><tbody>';
+        html += '<div class="table-container"><table><thead><tr><th>Ruta</th><th>Archivo</th><th>Peso</th><th>Modificado</th><th>Status</th><th>Acción</th></tr></thead><tbody>';
 
         for (const f of data.results) {
             html += '<tr>';
             html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
             html += '<td>' + escapeHtml(f.nombre) + '</td>';
             html += '<td>' + (f.peso ? escapeHtml(f.peso) : '-') + '</td>';
+            html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
             html += '<td>' + escapeHtml(f.status ?? '-') + '</td>';
             html += '<td><button class="secondary outline btn-eliminar" data-id="' + f.id + '" data-nombre="' + escapeHtml(f.nombre) + '" style="padding:0.25rem 0.5rem;font-size:0.85rem;">Eliminar</button></td>';
             html += '</tr>';
@@ -602,6 +665,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // === Listar tab ===
     let listarPage = 1;
+    let listarSort = 'ruta';
 
     function loadListar(page) {
         listarPage = page;
@@ -611,11 +675,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         container.innerHTML = '<p>Cargando...</p>';
 
-        fetch('?type=archivos-listar&page=' + page + '&ajax=1')
+        fetch('?type=archivos-listar&sort=' + encodeURIComponent(listarSort) + '&page=' + page + '&ajax=1')
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 var totalPages = Math.ceil(data.total / data.perPage);
-                info.innerHTML = '<p>Total: <strong>' + data.total + '</strong> archivos (pág. ' + data.page + ' de ' + totalPages + ')</p>';
+                var nextSort = (listarSort === 'fecha_archivo') ? 'ruta' : 'fecha_archivo';
+                var nextLabel = (nextSort === 'fecha_archivo') ? 'Modificado' : 'Ruta';
+                info.innerHTML = '<p style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">' +
+                    '<span>Total: <strong>' + data.total + '</strong> archivos (pág. ' + data.page + ' de ' + totalPages + ')</span>' +
+                    '<button class="secondary outline" id="btn-toggle-sort" style="padding:0.2rem 0.6rem;font-size:0.8rem;" type="button">Ordenar por ' + nextLabel + ' ▾</button>' +
+                    '</p>';
 
                 if (data.total === 0) {
                     container.innerHTML = '<p>No hay archivos.</p>';
@@ -623,17 +692,22 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
-                var html = '<table><thead><tr><th>Ruta</th><th>Archivo</th><th>Peso</th><th>Status</th><th>Desblinde</th><th>Activo</th><th>Fecha carga</th><th>Acción</th></tr></thead><tbody>';
+                var rutaArrow = (listarSort === 'ruta') ? ' ▾' : '';
+                var fechaArrow = (listarSort === 'fecha_archivo') ? ' ▾' : '';
+                var html = '<table><thead><tr><th>Ruta' + rutaArrow + '</th><th>Archivo</th><th>Peso</th><th>Flat</th><th>BR</th><th>Comp.</th><th>Modificado' + fechaArrow + '</th><th>Status</th><th>Desblinde</th><th>Activo</th><th>Acción</th></tr></thead><tbody>';
                 for (var i = 0; i < data.results.length; i++) {
                     var f = data.results[i];
                     html += '<tr>';
                     html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
                     html += '<td>' + escapeHtml(f.nombre) + '</td>';
                     html += '<td>' + (f.peso ? escapeHtml(f.peso) : '-') + '</td>';
+                    html += '<td style="font-family:monospace;font-size:0.8rem;">' + (f.flat ? escapeHtml(f.flat.substring(0, 3)) : '-') + '</td>';
+                    html += '<td style="font-family:monospace;font-size:0.8rem;">' + (f.br ? escapeHtml(f.br.substring(0, 3)) : '-') + '</td>';
+                    html += '<td>' + (f.compr_pct != null ? escapeHtml(f.compr_pct) + '%' : '-') + '</td>';
+                    html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
                     html += '<td>' + (f.status === 'ausente' ? '<span style="color:#e65100;font-weight:bold;">Ausente</span>' : escapeHtml(f.status || '-')) + '</td>';
                     html += '<td><input type="checkbox" class="toggle-desblinde" data-id="' + f.id + '"' + (f.is_desblinde ? ' checked' : '') + '></td>';
                     html += '<td><input type="checkbox" class="toggle-enabled" data-id="' + f.id + '"' + (f.enabled ? ' checked' : '') + '></td>';
-                    html += '<td>' + (f.fecha_carga ? escapeHtml(f.fecha_carga) : '-') + '</td>';
                     html += '<td><a href="/dashboard/archivo-editar?id=' + f.id + '" class="secondary outline" style="padding:0.2rem 0.5rem;font-size:0.8rem;text-decoration:none;">Editar</a></td>';
                     html += '</tr>';
                 }
@@ -655,6 +729,14 @@ document.addEventListener('DOMContentLoaded', function () {
                         loadListar(parseInt(this.dataset.page));
                     });
                 });
+
+                var sortBtn = document.getElementById('btn-toggle-sort');
+                if (sortBtn) {
+                    sortBtn.addEventListener('click', function () {
+                        listarSort = (listarSort === 'fecha_archivo') ? 'ruta' : 'fecha_archivo';
+                        loadListar(1);
+                    });
+                }
 
                 container.querySelectorAll('.toggle-enabled').forEach(function (cb) {
                     cb.addEventListener('change', function () {
@@ -707,6 +789,49 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelector('.tabs a[data-tab="listar"]').addEventListener('click', function () {
         loadListar(1);
     });
+
+    // === Registrar AJAX ===
+    var registrarForm = document.getElementById('registrar-form');
+    if (registrarForm) {
+        registrarForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var progress = document.getElementById('registrar-progress');
+            var logEl = document.getElementById('registrar-log');
+            var msgEl = document.getElementById('registrar-mensaje');
+
+            msgEl.style.display = 'none';
+            msgEl.textContent = '';
+            progress.style.display = 'block';
+            logEl.style.display = 'block';
+            logEl.textContent = 'Sincronizando...';
+
+            var formData = new FormData(registrarForm);
+            fetch('/dashboard/archivos', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                progress.style.display = 'none';
+                logEl.textContent = (data.log || []).join('\n');
+                msgEl.style.display = 'block';
+                if (data.status === 'OK') {
+                    msgEl.className = 'flash flash-success';
+                } else {
+                    msgEl.className = 'flash flash-warning';
+                }
+                msgEl.textContent = data.mensaje || '';
+            })
+            .catch(function () {
+                progress.style.display = 'none';
+                logEl.textContent = 'Error de conexión al servidor.';
+                msgEl.style.display = 'block';
+                msgEl.className = 'flash flash-warning';
+                msgEl.textContent = 'Error inesperado.';
+            });
+        });
+    }
 
 });
 </script>

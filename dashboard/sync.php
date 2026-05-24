@@ -4,6 +4,27 @@ $pageTitle = 'Sincronización';
 
 $pdo = getDB();
 
+// === AJAX: search archivos ===
+if (($_GET['type'] ?? '') === 'search-files') {
+    $q = trim($_GET['q'] ?? '');
+    $results = [];
+    if (strlen($q) >= 2) {
+        $stmt = $pdo->prepare("
+            SELECT id, ruta, nombre, status, enabled, fecha_archivo
+            FROM archivos
+            WHERE (ruta ILIKE ? OR nombre ILIKE ?) AND enabled = TRUE
+            ORDER BY ruta, nombre
+            LIMIT 50
+        ");
+        $like = '%' . $q . '%';
+        $stmt->execute([$like, $like]);
+        $results = $stmt->fetchAll();
+    }
+    header('Content-Type: application/json');
+    echo json_encode(['results' => $results]);
+    exit;
+}
+
 $totalFiles = $pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
 $disabled = $pdo->query("SELECT COUNT(*) FROM archivos WHERE enabled = FALSE")->fetchColumn();
 $updating = $pdo->query("SELECT COUNT(*) FROM archivos WHERE status = 'updating'")->fetchColumn();
@@ -33,19 +54,49 @@ require __DIR__ . '/header.php';
     </article>
 </div>
 
-<button id="btnSync" onclick="startSync()">🔄 Sincronizar Ahora</button>
+<div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+    <button id="btnSync" onclick="startSync()">🔄 Sincronizar Ahora</button>
+    <button id="btnSyncFast" onclick="startSyncFast()" class="secondary outline">⚡ Sync Rápido</button>
+</div>
 
 <div id="syncLoading" style="display:none; margin-top: 1rem;">
     <progress indeterminate></progress>
-    <p>Sincronizando archivos desde el servidor remoto...</p>
+    <p id="syncLoadingMsg">Sincronizando archivos desde el servidor remoto...</p>
 </div>
 
 <div id="syncResults" style="display:none; margin-top: 1rem;"></div>
 
+<hr style="margin:2rem 0;">
+
+<h2>Sync Selectivo</h2>
+<p style="color:#666;">Busca y selecciona archivos para sincronizar individualmente.</p>
+
+<div class="grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+    <article>
+        <header><strong>Archivos disponibles</strong></header>
+        <input type="text" id="selSearch" placeholder="Buscar archivo (mín. 2 caracteres)..." style="margin-bottom:0.75rem;">
+        <div id="selResults" style="max-height:400px;overflow-y:auto;">
+            <p style="color:#888;">Escribe para buscar archivos habilitados.</p>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+            <button id="btnSelSync" class="primary" disabled>Sincronizar seleccionados</button>
+            <button id="btnSelClear" class="secondary outline" disabled>Limpiar</button>
+        </div>
+        <progress id="selProgress" style="display:none;margin-top:0.75rem;width:100%;"></progress>
+    </article>
+    <article>
+        <header><strong>Resultados</strong></header>
+        <div id="selResultados" style="max-height:450px;overflow-y:auto;">
+            <p style="color:#888;">Los resultados aparecerán aquí después de sincronizar.</p>
+        </div>
+    </article>
+</div>
+
 <script>
-async function startSync() {
-    const btn = document.getElementById('btnSync');
+async function syncFetch(url, btnId) {
+    const btn = document.getElementById(btnId);
     const loading = document.getElementById('syncLoading');
+    const loadingMsg = document.getElementById('syncLoadingMsg');
     const results = document.getElementById('syncResults');
 
     btn.disabled = true;
@@ -54,7 +105,7 @@ async function startSync() {
     results.innerHTML = '';
 
     try {
-        const resp = await fetch('/api/v1/sync');
+        const resp = await fetch(url);
         const data = await resp.json();
 
         loading.style.display = 'none';
@@ -87,6 +138,15 @@ async function startSync() {
     }
 }
 
+async function startSync() {
+    await syncFetch('/api/v1/sync', 'btnSync');
+}
+
+async function startSyncFast() {
+    document.getElementById('syncLoadingMsg').textContent = 'Sync rápido: descargando todo con rsync...';
+    await syncFetch('/api/v1/sync-fast', 'btnSyncFast');
+}
+
 function renderSyncLog(output) {
     const lines = output.split('\n');
     let html = '<div style="background:#1e1e1e;padding:1rem;border-radius:4px;font-size:0.85rem;line-height:1.5;max-height:60vh;overflow-y:auto;font-family:monospace;">';
@@ -116,6 +176,157 @@ function htmlspecialchars(str) {
     div.textContent = str;
     return div.innerHTML;
 }
+
+function fmtFecha(ts) {
+    if (!ts) return '-';
+    var parts = ts.split(' ');
+    if (parts.length !== 2) return ts;
+    var d = parts[0].split('-');
+    var t = parts[1].split(':');
+    if (d.length < 3 || t.length < 2) return ts;
+    return d[1] + '-' + d[2] + ' ' + t[0] + ':' + t[1];
+}
+
+// === Sync Selectivo ===
+document.addEventListener('DOMContentLoaded', function () {
+    const searchInput = document.getElementById('selSearch');
+    const resultsDiv = document.getElementById('selResults');
+    const btnSync = document.getElementById('btnSelSync');
+    const btnClear = document.getElementById('btnSelClear');
+    const progress = document.getElementById('selProgress');
+    const resultadosDiv = document.getElementById('selResultados');
+
+    let searchTimer = null;
+
+    function renderFileList(data) {
+        if (data.results.length === 0) {
+            resultsDiv.innerHTML = '<p style="color:#888;">Sin resultados.</p>';
+            return;
+        }
+        let html = '<div style="display:flex;flex-direction:column;gap:0.3rem;">';
+        for (let i = 0; i < data.results.length; i++) {
+            const f = data.results[i];
+            const label = f.ruta + '/' + f.nombre;
+            html += '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.5rem;border-radius:4px;cursor:pointer;" onmouseenter="this.style.background=\'var(--card-background-color)\'" onmouseleave="this.style.background=\'\'">';
+            html += '<input type="checkbox" class="sel-file-cb" data-ruta="' + htmlspecialchars(f.ruta) + '" data-nombre="' + htmlspecialchars(f.nombre) + '" style="flex-shrink:0;">';
+            html += '<span style="font-size:0.85rem;">' + htmlspecialchars(label) + '</span>';
+            html += '<span style="font-size:0.75rem;color:#999;margin-left:0.75rem;">' + fmtFecha(f.fecha_archivo) + '</span>';
+            html += '<span style="margin-left:auto;font-size:0.75rem;color:#888;">' + htmlspecialchars(f.status) + '</span>';
+            html += '</label>';
+        }
+        html += '</div>';
+        resultsDiv.innerHTML = html;
+    }
+
+    function doSearch() {
+        const q = searchInput.value.trim();
+        if (q.length < 2) {
+            resultsDiv.innerHTML = '<p style="color:#888;">Escribe al menos 2 caracteres.</p>';
+            return;
+        }
+        fetch('?type=search-files&q=' + encodeURIComponent(q))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                renderFileList(data);
+                updateButtons();
+            })
+            .catch(function () {
+                resultsDiv.innerHTML = '<p style="color:red;">Error al buscar.</p>';
+            });
+    }
+
+    searchInput.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(doSearch, 300);
+    });
+
+    function getSelectedFiles() {
+        const cbs = resultsDiv.querySelectorAll('.sel-file-cb:checked');
+        const files = [];
+        for (let i = 0; i < cbs.length; i++) {
+            files.push({
+                ruta: cbs[i].dataset.ruta,
+                nombre: cbs[i].dataset.nombre,
+            });
+        }
+        return files;
+    }
+
+    function updateButtons() {
+        const files = getSelectedFiles();
+        btnSync.disabled = files.length === 0;
+        btnClear.disabled = files.length === 0;
+    }
+
+    resultsDiv.addEventListener('change', function (e) {
+        if (e.target.classList.contains('sel-file-cb')) {
+            updateButtons();
+        }
+    });
+
+    btnClear.addEventListener('click', function () {
+        const cbs = resultsDiv.querySelectorAll('.sel-file-cb:checked');
+        for (let i = 0; i < cbs.length; i++) {
+            cbs[i].checked = false;
+        }
+        updateButtons();
+    });
+
+    btnSync.addEventListener('click', function () {
+        const files = getSelectedFiles();
+        if (files.length === 0) return;
+
+        progress.style.display = 'block';
+        btnSync.disabled = true;
+        resultadosDiv.innerHTML = '<p style="color:#888;">Sincronizando...</p>';
+
+        fetch('/api/v1/sync-selected', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ files: files }),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            progress.style.display = 'none';
+            btnSync.disabled = false;
+
+            let html = '<div style="display:flex;flex-direction:column;gap:0.4rem;">';
+            if (data.resultados) {
+                for (let i = 0; i < data.resultados.length; i++) {
+                    const r = data.resultados[i];
+                    const label = r.ruta + '/' + r.nombre;
+                    let icon, color;
+                    if (r.compresion === 'OK') { icon = '✅'; color = '#2e7d32'; }
+                    else if (r.compresion === 'SKIP') { icon = '⏭️'; color = '#666'; }
+                    else if (r.sync === 'AUSENTE') { icon = '❌'; color = '#c62828'; }
+                    else { icon = '⚠️'; color = '#e65100'; }
+                    html += '<div style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.5rem;border-radius:4px;background:var(--card-background-color);">';
+                    html += '<span>' + icon + '</span>';
+                    html += '<span style="font-size:0.85rem;color:' + color + ';">' + htmlspecialchars(label) + '</span>';
+                    html += '<span style="margin-left:auto;font-size:0.75rem;color:#888;">' + htmlspecialchars(r.mensaje || '') + '</span>';
+                    html += '</div>';
+                }
+            }
+            if (data.elapsed) {
+                html += '<p style="margin-top:0.5rem;font-size:0.8rem;color:#888;">Completado en ' + htmlspecialchars(data.elapsed) + '</p>';
+            }
+            html += '</div>';
+            resultadosDiv.innerHTML = html;
+
+            // Uncheck synced files
+            const cbs = resultsDiv.querySelectorAll('.sel-file-cb:checked');
+            for (let i = 0; i < cbs.length; i++) {
+                cbs[i].checked = false;
+            }
+            updateButtons();
+        })
+        .catch(function (err) {
+            progress.style.display = 'none';
+            btnSync.disabled = false;
+            resultadosDiv.innerHTML = '<div class="flash flash-error">Error de conexión: ' + htmlspecialchars(err.message) + '</div>';
+        });
+    });
+});
 </script>
 
 <?php require __DIR__ . '/footer.php'; ?>

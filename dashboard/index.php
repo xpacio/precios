@@ -11,7 +11,7 @@ $totalDescargas = $pdo->query("SELECT COALESCE(SUM(n_descargas), 0) FROM archivo
 $asociaciones = $pdo->query("SELECT COUNT(*) FROM archivo_sucursal WHERE enabled = TRUE")->fetchColumn();
 
 $stmt = $pdo->query("
-    SELECT a.nombre, a.ruta, a.xxh3, a.fecha_carga
+    SELECT a.nombre, a.ruta, a.xxh3, a.fecha_carga, a.fecha_archivo
     FROM archivos a
     ORDER BY a.fecha_carga DESC
     LIMIT 10
@@ -55,18 +55,20 @@ require __DIR__ . '/header.php';
                     <th>Archivo</th>
                     <th>Ruta</th>
                     <th>XXH3</th>
+                    <th>Modificado</th>
                     <th>Registrado</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($recientes)): ?>
-                    <tr><td colspan="4">Sin archivos registrados.</td></tr>
+                    <tr><td colspan="5">Sin archivos registrados.</td></tr>
                 <?php else: ?>
                     <?php foreach ($recientes as $f): ?>
                         <tr>
                             <td><?= htmlspecialchars($f['nombre']) ?></td>
                             <td><code><?= htmlspecialchars($f['ruta']) ?></code></td>
                             <td><code><?= htmlspecialchars($f['xxh3'] ?? '-') ?></code></td>
+                            <td style="font-size:0.85rem;"><?= $f['fecha_archivo'] ? date('m-d H:i', strtotime($f['fecha_archivo'])) : '-' ?></td>
                             <td><?= htmlspecialchars($f['fecha_carga']) ?></td>
                         </tr>
                     <?php endforeach; ?>

@@ -52,6 +52,7 @@ fi
 if [[ "${1:-}" == "--files-from" ]]; then
     log "INFO" "Modo rápido: rsync --files-from"
     rsync -tirvz --files-from="$PRECIOS_FILE" -e ssh "$REMOTE_HOST:$REMOTE_PATH" "$DEST_DIR/" < /dev/null
+    chown -R www-data:www-data "$DEST_DIR" 2>/dev/null || true
     exit $?
 fi
 
@@ -98,6 +99,7 @@ log "i3" "No encontrados en remoto: $NO_ENCONTRADOS"
 log "i3" "Errores en transferencia: $ERRORES"
 log "i3" "Tiempo total: ${DURATION} segundos"
 
+chown -R www-data:www-data "$DEST_DIR" 2>/dev/null || true
 
 # Salir con código apropiado
 if [[ $ERRORES -gt 0 ]] || [[ $NO_ENCONTRADOS -gt 0 ]]; then
