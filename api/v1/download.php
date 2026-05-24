@@ -48,7 +48,7 @@ try {
         exit;
     }
 
-    $brPath = $fileRow['ruta'] . '/' . $fileRow['nombre'] . '.br';
+    $brPath = '/srv/precios/' . $fileRow['ruta'] . '/' . $fileRow['nombre'] . '.br';
 
     if (!file_exists($brPath)) {
         http_response_code(404);

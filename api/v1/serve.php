@@ -41,7 +41,7 @@ try {
         exit;
     }
 
-    $brPath = $file['ruta'] . '/' . $file['nombre'] . '.br';
+    $brPath = $PRECIOS_DIR . '/' . $file['ruta'] . '/' . $file['nombre'] . '.br';
 
     if (!file_exists($brPath)) {
         http_response_code(404);
