@@ -22,29 +22,32 @@ public class SyncService(ApiClient api, string sucursalId)
         Console.WriteLine($"Archivos pendientes: {files.Count}\n");
 
         int ok = 0, fail = 0;
+        var total = files.Count;
 
         foreach (var f in files)
         {
-            Console.Write($"{f.Nombre,-25} ");
+            DrawProgress(ok + fail, total, f.Nombre);
 
             try
             {
                 await DownloadAndConfirm(f);
-                Console.WriteLine("✓ OK");
                 ok++;
+                DrawProgress(ok + fail, total, $"✓ {f.Nombre}");
             }
             catch (IOException ex) when (IsLocked(ex))
             {
-                Console.WriteLine("⚠ BLOQUEADO - saltando");
                 fail++;
+                DrawProgress(ok + fail, total, $"⚠ {f.Nombre} (bloqueado)");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"✗ ERROR: {ex.Message}");
                 fail++;
+                Console.WriteLine($"\n  ✗ {f.Nombre}: {ex.Message}");
+                DrawProgress(ok + fail, total, null);
             }
         }
 
+        Console.Write("\n");
         Console.WriteLine($"\n=== Resumen: {ok} OK, {fail} fallos ===");
     }
 
@@ -117,28 +120,37 @@ public class SyncService(ApiClient api, string sucursalId)
 
     private async Task DownloadAllInteractive(List<PendingFile> files, bool isDesblinde = false)
     {
+        int ok = 0, fail = 0;
+        var total = files.Count;
+
         foreach (var f in files)
         {
-            Console.Write($"\n{f.Nombre,-25} ");
+            DrawProgress(ok + fail, total, f.Nombre);
 
             try
             {
                 await DownloadAndConfirm(f, isDesblinde);
-                Console.WriteLine("✓ OK");
+                ok++;
+                DrawProgress(ok + fail, total, $"✓ {f.Nombre}");
             }
             catch (IOException ex) when (IsLocked(ex))
             {
-                Console.WriteLine("⚠ BLOQUEADO");
-                Console.Write("  [R] Reintentar  [C] Continuar  [S] Salir: ");
+                fail++;
+                DrawProgress(ok + fail, total, $"⚠ {f.Nombre} (bloqueado)");
+                Console.Write("\n  [R] Reintentar  [C] Continuar  [S] Salir: ");
                 var r = Console.ReadLine()?.Trim().ToLower();
-                if (r == "r") { try { await DownloadAndConfirm(f, isDesblinde); Console.WriteLine("  ✓ OK"); } catch (Exception ex2) { Console.WriteLine($"  ✗ {ex2.Message}"); } }
+                if (r == "r") { try { await DownloadAndConfirm(f, isDesblinde); ok++; fail--; DrawProgress(ok + fail, total, $"✓ {f.Nombre}"); } catch (Exception ex2) { Console.WriteLine($"  ✗ {ex2.Message}"); DrawProgress(ok + fail, total, null); } }
                 else if (r == "s") break;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"✗ ERROR: {ex.Message}");
+                fail++;
+                Console.WriteLine($"\n  ✗ {f.Nombre}: {ex.Message}");
+                DrawProgress(ok + fail, total, null);
             }
         }
+
+        Console.Write("\n");
     }
 
     private async Task DownloadOneInteractive(PendingFile f)
@@ -163,6 +175,16 @@ public class SyncService(ApiClient api, string sucursalId)
                 return;
             }
         }
+    }
+
+    private static void DrawProgress(int done, int total, string? label)
+    {
+        var pct = total > 0 ? done * 100 / total : 0;
+        var filled = pct * 50 / 100;
+        var bar = new string('█', filled) + new string('░', 50 - filled);
+        Console.Write($"\r[{bar}] {pct,3}%  ({done}/{total})");
+        if (label != null)
+            Console.Write($"  {label}");
     }
 
     private async Task DownloadAndConfirm(PendingFile f, bool isDesblinde = false)
