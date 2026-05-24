@@ -26,7 +26,7 @@ try {
     $rows = $stmt->fetchAll();
 
     foreach ($rows as $row) {
-        $fullPath = $row['ruta'] . '/' . $row['nombre'];
+        $fullPath = $PRECIOS_DIR . '/' . $row['ruta'] . '/' . $row['nombre'];
         $brPath = $fullPath . '.br';
         $exists = file_exists($fullPath);
 

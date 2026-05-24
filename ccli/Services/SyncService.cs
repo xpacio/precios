@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Ccli.Models;
@@ -21,29 +22,32 @@ public class SyncService(ApiClient api, string sucursalId)
         Console.WriteLine($"Archivos pendientes: {files.Count}\n");
 
         int ok = 0, fail = 0;
+        var total = files.Count;
 
         foreach (var f in files)
         {
-            Console.Write($"{f.Nombre,-25} ");
+            DrawProgress(ok + fail, total, f.Nombre);
 
             try
             {
                 await DownloadAndConfirm(f);
-                Console.WriteLine("✓ OK");
                 ok++;
+                DrawProgress(ok + fail, total, $"✓ {f.Nombre}");
             }
-            catch (IOException) when (IsLocked())
+            catch (IOException ex) when (IsLocked(ex))
             {
-                Console.WriteLine("⚠ BLOQUEADO - saltando");
                 fail++;
+                DrawProgress(ok + fail, total, $"⚠ {f.Nombre} (bloqueado)");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"✗ ERROR: {ex.Message}");
                 fail++;
+                Console.WriteLine($"\n  ✗ {f.Nombre}: {ex.Message}");
+                DrawProgress(ok + fail, total, null);
             }
         }
 
+        Console.Write("\n");
         Console.WriteLine($"\n=== Resumen: {ok} OK, {fail} fallos ===");
     }
 
@@ -71,14 +75,14 @@ public class SyncService(ApiClient api, string sucursalId)
                 < 1024 * 1024 => $"{files[i].Peso / 1024} KB",
                 _ => $"{files[i].Peso / (1024 * 1024)} MB"
             };
-            Console.WriteLine($"{i + 1,-4} {files[i].Nombre,-25} {files[i].Md5zip ?? "-",-10} {peso,-10}");
+            Console.WriteLine($"{i + 1,-4} {files[i].Nombre,-25} {files[i].Br ?? "-",-10} {peso,-10}");
         }
 
         Console.WriteLine();
 
         while (true)
         {
-            Console.Write("Seleccione archivo (número), T=todos, S=salir: ");
+            Console.Write("Seleccione archivo (número), T=todos, D=desblinde, S=salir: ");
             var line = Console.ReadLine();
             if (line == null) break;
             var input = line.Trim().ToLower();
@@ -87,7 +91,13 @@ public class SyncService(ApiClient api, string sucursalId)
 
             if (input == "t")
             {
-                await DownloadAllInteractive(files);
+                await DownloadAllInteractive(files, isDesblinde: false);
+                break;
+            }
+
+            if (input == "d")
+            {
+                await DownloadAllInteractive(files, isDesblinde: true);
                 break;
             }
 
@@ -108,30 +118,39 @@ public class SyncService(ApiClient api, string sucursalId)
         }
     }
 
-    private async Task DownloadAllInteractive(List<PendingFile> files)
+    private async Task DownloadAllInteractive(List<PendingFile> files, bool isDesblinde = false)
     {
+        int ok = 0, fail = 0;
+        var total = files.Count;
+
         foreach (var f in files)
         {
-            Console.Write($"\n{f.Nombre,-25} ");
+            DrawProgress(ok + fail, total, f.Nombre);
 
             try
             {
-                await DownloadAndConfirm(f);
-                Console.WriteLine("✓ OK");
+                await DownloadAndConfirm(f, isDesblinde);
+                ok++;
+                DrawProgress(ok + fail, total, $"✓ {f.Nombre}");
             }
-            catch (IOException) when (IsLocked())
+            catch (IOException ex) when (IsLocked(ex))
             {
-                Console.WriteLine("⚠ BLOQUEADO");
-                Console.Write("  [R] Reintentar  [C] Continuar  [S] Salir: ");
+                fail++;
+                DrawProgress(ok + fail, total, $"⚠ {f.Nombre} (bloqueado)");
+                Console.Write("\n  [R] Reintentar  [C] Continuar  [S] Salir: ");
                 var r = Console.ReadLine()?.Trim().ToLower();
-                if (r == "r") { try { await DownloadAndConfirm(f); Console.WriteLine("  ✓ OK"); } catch (Exception ex2) { Console.WriteLine($"  ✗ {ex2.Message}"); } }
+                if (r == "r") { try { await DownloadAndConfirm(f, isDesblinde); ok++; fail--; DrawProgress(ok + fail, total, $"✓ {f.Nombre}"); } catch (Exception ex2) { Console.WriteLine($"  ✗ {ex2.Message}"); DrawProgress(ok + fail, total, null); } }
                 else if (r == "s") break;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"✗ ERROR: {ex.Message}");
+                fail++;
+                Console.WriteLine($"\n  ✗ {f.Nombre}: {ex.Message}");
+                DrawProgress(ok + fail, total, null);
             }
         }
+
+        Console.Write("\n");
     }
 
     private async Task DownloadOneInteractive(PendingFile f)
@@ -144,7 +163,7 @@ public class SyncService(ApiClient api, string sucursalId)
                 Console.WriteLine("✓ Descargado y confirmado.");
                 return;
             }
-            catch (IOException) when (IsLocked())
+            catch (IOException ex) when (IsLocked(ex))
             {
                 Console.Write("Archivo bloqueado. [R] Reintentar  [C] Continuar  [S] Salir: ");
                 var r = Console.ReadLine()?.Trim().ToLower();
@@ -158,13 +177,23 @@ public class SyncService(ApiClient api, string sucursalId)
         }
     }
 
-    private async Task DownloadAndConfirm(PendingFile f)
+    private static void DrawProgress(int done, int total, string? label)
+    {
+        var pct = total > 0 ? done * 100 / total : 0;
+        var filled = pct * 50 / 100;
+        var bar = new string('█', filled) + new string('░', 50 - filled);
+        Console.Write($"\r[{bar}] {pct,3}%  ({done}/{total})");
+        if (label != null)
+            Console.Write($"  {label}");
+    }
+
+    private async Task DownloadAndConfirm(PendingFile f, bool isDesblinde = false)
     {
         var destDir = Directory.GetCurrentDirectory();
         var destPath = Path.Combine(destDir, f.Nombre);
 
         // 1. Download .br to temp
-        var (remoteMd5zip, remoteMd5flat, stream) = await api.DownloadFileAsync(sucursalId, f.Nombre);
+        var (remoteBr, remoteFlat, stream) = await api.DownloadFileAsync(sucursalId, f.Nombre, isDesblinde);
 
         var tmpBrPath = Path.GetTempFileName();
         try
@@ -180,10 +209,10 @@ public class SyncService(ApiClient api, string sucursalId)
 
         try
         {
-            // 2. Verify md5zip (MD5 of .br)
-            var brMd5 = GetMd58(tmpBrPath);
-            if (remoteMd5zip != null && !brMd5.Equals(remoteMd5zip, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"MD5zip mismatch: esperado {remoteMd5zip}, local {brMd5}");
+            // 2. Verify md5zip (XXH3 of .br)
+            var brMd5 = GetXxHash3_6(tmpBrPath);
+            if (remoteBr != null && !brMd5.Equals(remoteBr, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"XXH3 zip mismatch: esperado {remoteBr}, local {brMd5}");
 
             // 3. Decompress Brotli to temp .DBF
             var tmpDbfPath = Path.GetTempFileName();
@@ -194,10 +223,10 @@ public class SyncService(ApiClient api, string sucursalId)
                 using (var brotli = new BrotliStream(brStream, CompressionMode.Decompress))
                     await brotli.CopyToAsync(dbfStream);
 
-                // 4. Verify md5flat (MD5 of .DBF)
-                var dbfMd5 = GetMd58(tmpDbfPath);
-                if (remoteMd5flat != null && !dbfMd5.Equals(remoteMd5flat, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException($"MD5flat mismatch: esperado {remoteMd5flat}, local {dbfMd5}");
+                // 4. Verify md5flat (XXH3 of .DBF)
+                var dbfMd5 = GetXxHash3_6(tmpDbfPath);
+                if (remoteFlat != null && !dbfMd5.Equals(remoteFlat, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"XXH3 flat mismatch: esperado {remoteFlat}, local {dbfMd5}");
 
                 // 5. Rename existing .DBF with consecutive suffix
                 if (File.Exists(destPath))
@@ -224,16 +253,27 @@ public class SyncService(ApiClient api, string sucursalId)
         await api.ConfirmAsync(sucursalId, f.Nombre);
     }
 
-    private static string GetMd58(string path)
+    private static string GetXxHash3_6(string path)
     {
-        using var md5 = MD5.Create();
-        using var stream = File.OpenRead(path);
-        var hash = md5.ComputeHash(stream);
-        return Convert.ToHexString(hash)[..8].ToLower();
+        var xxh3 = new XxHash3();
+        byte[] buffer = new byte[65536];
+        int bytesRead;
+
+        using (var stream = File.OpenRead(path))
+        {
+            while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                xxh3.Append(buffer.AsSpan(0, bytesRead));
+            }
+        }
+
+        var hash = xxh3.GetCurrentHash();
+        return Convert.ToHexString(hash)[..6].ToLower();
     }
 
-    private static bool IsLocked()
+    private static bool IsLocked(IOException ex)
     {
-        return true;
+        int errorCode = ex.HResult & 0xFFFF;
+        return errorCode == 32 || errorCode == 33; // 32 = ERROR_SHARING_VIOLATION, 33 = ERROR_LOCK_VIOLATION
     }
 }

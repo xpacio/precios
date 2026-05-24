@@ -41,7 +41,7 @@ try {
         exit;
     }
 
-    $brPath = $file['ruta'] . '/' . $file['nombre'] . '.br';
+    $brPath = $PRECIOS_DIR . '/' . $file['ruta'] . '/' . $file['nombre'] . '.br';
 
     if (!file_exists($brPath)) {
         http_response_code(404);
@@ -55,7 +55,7 @@ try {
     header('X-FLAT: ' . $file['flat']);
     header('X-BR: ' . $file['br']);
 
-    readfile($fullPath);
+    readfile($brPath);
 
 } catch (Exception $e) {
     http_response_code(500);
