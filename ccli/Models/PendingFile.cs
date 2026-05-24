@@ -20,7 +20,7 @@ public class PendingResponse
 public class PendingFile
 {
     [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
+    public int Id { get; set; }
 
     [JsonPropertyName("nombre")]
     public string Nombre { get; set; } = "";
