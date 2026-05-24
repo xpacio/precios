@@ -738,7 +738,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 var html = '<table><thead><tr><th>Ruta' + rutaArrow + '</th><th>Archivo</th><th>Peso</th><th>Desc</th><th>fl</th><th>br</th><th>Comp.</th><th>Disp</th><th>Modificado' + fechaArrow + '</th><th>Carga</th><th>Status</th><th>Desblinde</th><th>Activo</th></tr></thead><tbody>';
                 for (var i = 0; i < data.results.length; i++) {
                     var f = data.results[i];
-                    html += '<tr>';
+                    var dispPct = f.total_suc > 0 ? Math.round(f.sync_suc / f.total_suc * 100) : -1;
+                    var rowStyle = '';
+                    if (dispPct === 100) rowStyle = ' style="background:rgba(0,200,0,0.04);"';
+                    else if (dispPct > 0) rowStyle = ' style="background:rgba(200,180,0,0.06);"';
+                    html += '<tr' + rowStyle + '>';
                     html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
             html += '<td><a href="/dashboard/archivo-editar?id=' + f.id + '">' + escapeHtml(f.nombre) + '</a></td>';
                     html += '<td>' + (f.peso ? escapeHtml(f.peso) : '-') + '</td>';
@@ -746,10 +750,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     html += '<td style="font-family:monospace;font-size:0.8rem;">' + (f.flat ? escapeHtml(f.flat.substring(0, 3)) : '-') + '</td>';
                     html += '<td style="font-family:monospace;font-size:0.8rem;">' + (f.br ? escapeHtml(f.br.substring(0, 3)) : '-') + '</td>';
                     html += '<td>' + (f.compr_pct != null ? escapeHtml(f.compr_pct) + '%' : '-') + '</td>';
-                    html += '<td style="font-family:monospace;font-size:0.8rem;">';
+                    html += '<td style="font-family:monospace;font-size:0.8rem;';
+                    if (dispPct === 100) html += 'color:limegreen;font-weight:bold;';
+                    else if (dispPct > 0) html += 'color:#c8a000;font-weight:bold;';
+                    html += '">';
                     if (f.total_suc > 0) {
-                        var pct = Math.round(f.sync_suc / f.total_suc * 100);
-                        html += pct + '% ' + f.sync_suc + '/' + f.total_suc;
+                        html += dispPct + '% ' + f.sync_suc + '/' + f.total_suc;
                     } else {
                         html += '<a href="/dashboard/archivos?tab=asociar&id=' + f.id + '&q=' + encodeURIComponent(f.nombre) + '" style="text-decoration:none;color:#888;" title="Asociar a sucursal">+</a>';
                     }

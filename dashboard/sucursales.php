@@ -10,6 +10,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $sucursalId = $_POST['sucursal_id'] ?? '';
     $archivoId = (int)($_POST['archivo_id'] ?? 0);
 
+    // === AJAX: toggle sync ===
+    if ($_POST['action'] === 'toggle-sync' && $sucursalId && $archivoId) {
+        header('Content-Type: application/json');
+        $sync = !empty($_POST['sync']);
+        try {
+            $pdo->prepare("UPDATE archivo_sucursal SET sync = ? WHERE archivo_id = ? AND sucursal_id = ?")
+                ->execute([$sync ? 't' : 'f', $archivoId, $sucursalId]);
+            echo json_encode(['ok' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     if ($_POST['action'] === 'editar' && $sucursalId) {
         $nuevoNombre = trim($_POST['nombre_sucursal'] ?? '');
         $enabled = !empty($_POST['enabled']) ? 't' : 'f';
@@ -166,7 +180,7 @@ require __DIR__ . '/header.php';
                     <th>Archivo</th>
                     <th>fl</th>
                     <th>br</th>
-                    <th>Sincronizado</th>
+                    <th>Sync</th>
                     <th>Acción</th>
                 </tr>
             </thead>
@@ -181,7 +195,7 @@ require __DIR__ . '/header.php';
                             <td><?= htmlspecialchars(str_replace('/srv/precios/', '', $a['ruta']) . '/' . $a['nombre']) ?></td>
                             <td><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code></td>
                             <td><code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
-                            <td><?= $estaSync ? '<span>✔</span>' : '<span>Pendiente</span>' ?></td>
+                            <td><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>"<?= $estaSync ? ' checked' : '' ?>></td>
                             <td>
                                 <form method="POST" action="/dashboard/sucursales" style="display:inline">
                                     <input type="hidden" name="action" value="desasociar">
@@ -198,6 +212,26 @@ require __DIR__ . '/header.php';
     </div>
 
     <?php } ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.toggle-sync').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var formData = new FormData();
+            formData.append('action', 'toggle-sync');
+            formData.append('sucursal_id', '<?= htmlspecialchars($sucursalDetalle) ?>');
+            formData.append('archivo_id', this.dataset.id);
+            formData.append('sync', this.checked ? '1' : '');
+            fetch('/dashboard/sucursales', { method: 'POST', body: formData })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.ok) cb.checked = !cb.checked;
+                })
+                .catch(function () { cb.checked = !cb.checked; });
+        });
+    });
+});
+</script>
 <?php else: ?>
     <nav class="tabs">
         <ul>
