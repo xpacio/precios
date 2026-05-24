@@ -12,8 +12,8 @@ public class PendingFile
 {
     public string Id { get; set; } = "";
     public string Nombre { get; set; } = "";
-    public string? Md5zip { get; set; }
-    public string? Md5flat { get; set; }
+    public string? Br { get; set; }
+    public string? Flat { get; set; }
     public int Peso { get; set; }
-    public string? UltimoCambio { get; set; }
+    public string? Ultimo_Cambio { get; set; }
 }

@@ -21,19 +21,23 @@ public class ApiClient(HttpClient http, string apiKey)
         return body?.Archivos ?? [];
     }
 
-    public async Task<(string? Md5zip, string? Md5flat, Stream Stream)> DownloadFileAsync(string sucursalId, string nombre)
+    public async Task<(string? Br, string? Flat, Stream Stream)> DownloadFileAsync(string sucursalId, string nombre, bool isDesblinde = false)
     {
         var req = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/serve/{sucursalId}/{Uri.EscapeDataString(nombre)}");
         req.Headers.Add("X-API-Key", apiKey);
+        if (isDesblinde)
+        {
+            req.Headers.Add("Is-Desblinde", "1");
+        }
 
         var res = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
         res.EnsureSuccessStatusCode();
 
-        var md5zip = res.Headers.TryGetValues("Md5zip", out var zipValues) ? zipValues.FirstOrDefault() : null;
-        var md5flat = res.Headers.TryGetValues("Md5flat", out var flatValues) ? flatValues.FirstOrDefault() : null;
+        var br = res.Headers.TryGetValues("X-BR", out var zipValues) ? zipValues.FirstOrDefault() : null;
+        var flat = res.Headers.TryGetValues("X-FLAT", out var flatValues) ? flatValues.FirstOrDefault() : null;
         var stream = await res.Content.ReadAsStreamAsync();
 
-        return (md5zip, md5flat, stream);
+        return (br, flat, stream);
     }
 
     public async Task<bool> ConfirmAsync(string sucursalId, string nombre)

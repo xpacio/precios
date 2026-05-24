@@ -55,7 +55,7 @@ try {
     header('X-FLAT: ' . $file['flat']);
     header('X-BR: ' . $file['br']);
 
-    readfile($fullPath);
+    readfile($brPath);
 
 } catch (Exception $e) {
     http_response_code(500);

@@ -47,6 +47,8 @@ CREATE TABLE archivos (
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    compr_pct INT DEFAULT NULL,
+    fecha_archivo TIMESTAMP DEFAULT NULL,
     UNIQUE (ruta, nombre)
 );
 
@@ -73,6 +75,4 @@ INSERT INTO api_keys (api_key, descripcion, usuario_id, enabled)
 VALUES ('precios_api_key_2024', 'API Key por defecto del administrador', 1, TRUE);
 
 INSERT INTO sucursales (id_sucursal, nombre_sucursal, enabled) VALUES
-('S001', 'Sucursal Central', TRUE),
-('S002', 'Sucursal Norte', TRUE),
-('S003', 'Sucursal Sur', TRUE);
+('00000', 'Sucursal de Pruebas', TRUE);
