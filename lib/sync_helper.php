@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/hash_helper.php';
+
 function processAndCompressFile(string $ruta, string $nombre): array
 {
     $baseDir = '/srv/precios';
@@ -21,7 +23,7 @@ function processAndCompressFile(string $ruta, string $nombre): array
     }
 
     $data = file_get_contents($realPath);
-    $flat = substr(hash('xxh3', $data), 0, 6);
+    $flat = flatHash($data);
     $peso = filesize($realPath);
     $fechaArchivo = date('Y-m-d H:i:s', filemtime($realPath));
     $brPath = $realPath . '.br';
@@ -68,7 +70,7 @@ function processAndCompressFile(string $ruta, string $nombre): array
 
         rename($tmpPath, $brPath);
 
-        $br = substr(hash('xxh3', $compressed), 0, 6);
+        $br = flatHash($compressed);
         $brPeso = filesize($brPath);
         $comprPct = $peso > 0 ? (int)round($brPeso * 100 / $peso) : null;
 

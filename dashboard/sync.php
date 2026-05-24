@@ -184,7 +184,7 @@ function fmtFecha(ts) {
     var d = parts[0].split('-');
     var t = parts[1].split(':');
     if (d.length < 3 || t.length < 2) return ts;
-    return d[1] + '-' + d[2] + ' ' + t[0] + ':' + t[1];
+    return d[0].slice(-1) + d[1] + d[2] + '.' + t[0] + t[1];
 }
 
 // === Sync Selectivo ===

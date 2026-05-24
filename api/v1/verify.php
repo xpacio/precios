@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../lib/hash_helper.php';
 
 $PRECIOS_DIR = '/srv/precios';
 
@@ -38,14 +39,14 @@ try {
         }
 
         $data = file_get_contents($fullPath);
-        $flat = substr(hash('xxh3', $data), 0, 6);
+        $flat = flatHash($data);
         $changed = $row['flat'] !== $flat || !file_exists($brPath);
 
         if ($changed) {
             $brContent = brotli_compress($data, 11);
             if ($brContent === false) throw new RuntimeException("No se pudo comprimir: $fullPath");
             file_put_contents($brPath, $brContent);
-            $br = substr(hash('xxh3', $brContent), 0, 6);
+            $br = flatHash($brContent);
             $size = filesize($brPath);
 
             $pdo->prepare("UPDATE archivos SET flat = ?, br = ?, peso = ?, status = 'ready', updated_at = NOW() WHERE id = ?")

@@ -6,6 +6,12 @@ $pdo = getDB();
 $mensaje = '';
 $error = '';
 
+function fmtFecha($ts) {
+    if (!$ts) return '-';
+    $t = strtotime($ts);
+    return substr(date('Y', $t), -1) . date('md.Hi', $t);
+}
+
 // Crear usuario
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if ($_POST['action'] === 'crear') {
@@ -13,14 +19,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $nickname = trim($_POST['nickname'] ?? '');
         $password = $_POST['password'] ?? '';
         $clavecorta = trim($_POST['clavecorta'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $err_notif = !empty($_POST['err_notif']);
 
         if (empty($nombre) || empty($nickname) || empty($password)) {
             $error = 'Nombre, nickname y contraseña son obligatorios.';
         } else {
             $hash = password_hash($password, PASSWORD_BCRYPT);
             try {
-                $stmt = $pdo->prepare("INSERT INTO usuarios (nombre, nickname, password, clavecorta) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$nombre, $nickname, $hash, $clavecorta]);
+                $stmt = $pdo->prepare("INSERT INTO usuarios (nombre, nickname, password, clavecorta, email, err_notif) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$nombre, $nickname, $hash, $clavecorta, $email, $err_notif ? 't' : 'f']);
                 $mensaje = "Usuario '$nickname' creado exitosamente.";
             } catch (Exception $e) {
                 $error = 'Error al crear usuario: ' . $e->getMessage();
@@ -39,7 +47,7 @@ if (isset($_GET['toggle']) && is_numeric($_GET['toggle'])) {
     exit;
 }
 
-$usuarios = $pdo->query("SELECT id, nombre, nickname, enabled, can_upload, can_download, created_at FROM usuarios ORDER BY id")->fetchAll();
+$usuarios = $pdo->query("SELECT id, nombre, nickname, email, enabled, can_upload, can_download, err_notif, created_at FROM usuarios ORDER BY id")->fetchAll();
 
 require __DIR__ . '/header.php';
 ?>
@@ -74,6 +82,14 @@ require __DIR__ . '/header.php';
                 Clave corta
                 <input type="text" name="clavecorta" placeholder="Opcional">
             </label>
+            <label>
+                Email
+                <input type="email" name="email" placeholder="Opcional">
+            </label>
+            <label>
+                <input type="checkbox" name="err_notif" value="1">
+                Notificar errores
+            </label>
         </div>
         <button type="submit">Crear Usuario</button>
     </form>
@@ -86,9 +102,11 @@ require __DIR__ . '/header.php';
                 <th>ID</th>
                 <th>Nombre</th>
                 <th>Nickname</th>
+                <th>Email</th>
                 <th>Estado</th>
                 <th>Subir</th>
                 <th>Descargar</th>
+                <th>Err.Notif</th>
                 <th>Creado</th>
                 <th>Acciones</th>
             </tr>
@@ -99,6 +117,7 @@ require __DIR__ . '/header.php';
                     <td><?= $u['id'] ?></td>
                     <td><?= htmlspecialchars($u['nombre']) ?></td>
                     <td><?= htmlspecialchars($u['nickname']) ?></td>
+                    <td><?= htmlspecialchars($u['email'] ?? '') ?></td>
                     <td>
                         <?php if ($u['enabled'] === 't' || $u['enabled'] === true): ?>
                             <span style="color: green;">Activo</span>
@@ -108,7 +127,8 @@ require __DIR__ . '/header.php';
                     </td>
                     <td><?= ($u['can_upload'] === 't' || $u['can_upload'] === true) ? 'Si' : 'No' ?></td>
                     <td><?= ($u['can_download'] === 't' || $u['can_download'] === true) ? 'Si' : 'No' ?></td>
-                    <td><?= htmlspecialchars($u['created_at']) ?></td>
+                    <td><?= ($u['err_notif'] === 't' || $u['err_notif'] === true) ? 'Si' : 'No' ?></td>
+                    <td><?= fmtFecha($u['created_at']) ?></td>
                     <td class="actions">
                         <a href="/dashboard/usuarios?toggle=<?= $u['id'] ?>" role="button" class="secondary outline" style="padding: 0.25rem 0.5rem;">
                             <?= ($u['enabled'] === 't' || $u['enabled'] === true) ? 'Deshabilitar' : 'Habilitar' ?>

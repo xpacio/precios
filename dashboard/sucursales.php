@@ -10,6 +10,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $sucursalId = $_POST['sucursal_id'] ?? '';
     $archivoId = (int)($_POST['archivo_id'] ?? 0);
 
+    if ($_POST['action'] === 'editar' && $sucursalId) {
+        $nuevoNombre = trim($_POST['nombre_sucursal'] ?? '');
+        $enabled = !empty($_POST['enabled']) ? 't' : 'f';
+        if ($nuevoNombre) {
+            try {
+                $pdo->prepare("UPDATE sucursales SET nombre_sucursal = ?, enabled = ? WHERE id_sucursal = ?")
+                    ->execute([$nuevoNombre, $enabled, $sucursalId]);
+                $mensaje = 'Sucursal actualizada.';
+            } catch (Exception $e) {
+                $error = 'Error: ' . $e->getMessage();
+            }
+        }
+    }
+
     if ($_POST['action'] === 'desasociar' && $sucursalId && $archivoId) {
         try {
             $pdo->prepare("DELETE FROM archivo_sucursal WHERE archivo_id = ? AND sucursal_id = ?")
@@ -113,7 +127,7 @@ require __DIR__ . '/header.php';
         echo '<p>style="color:red"">Sucursal no encontrada</p>';
     } else {
         $stmt = $pdo->prepare("
-            SELECT a.id, a.ruta, a.nombre, a.flat, a.xxh3, a.peso, asu.sync, asu.created_at AS asociado_desde
+            SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.peso, asu.sync, asu.created_at AS asociado_desde
             FROM archivo_sucursal asu
             JOIN archivos a ON a.id = asu.archivo_id
             WHERE asu.sucursal_id = ? AND asu.enabled = TRUE
@@ -128,14 +142,30 @@ require __DIR__ . '/header.php';
         Sucursal: <?= htmlspecialchars($suc['id_sucursal']) ?> - <?= htmlspecialchars($suc['nombre_sucursal']) ?>
     </h2>
 
+    <article>
+        <form method="POST" action="/dashboard/sucursales" style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap;">
+            <input type="hidden" name="action" value="editar">
+            <input type="hidden" name="sucursal_id" value="<?= htmlspecialchars($sucursalDetalle) ?>">
+            <label style="flex:1;min-width:200px;">
+                Nombre
+                <input type="text" name="nombre_sucursal" value="<?= htmlspecialchars($suc['nombre_sucursal']) ?>" required>
+            </label>
+            <label style="white-space:nowrap;">
+                <input type="checkbox" name="enabled" value="1" <?= ($suc['enabled'] ?? 't') === 't' ? 'checked' : '' ?>>
+                Activa
+            </label>
+            <button type="submit" class="secondary outline" style="padding:0.3rem 0.8rem;">Guardar</button>
+        </form>
+    </article>
+
     <h3>Archivos Asociados (<?= count($asociados) ?>)</h3>
     <div class="table-container">
         <table>
             <thead>
                 <tr>
                     <th>Archivo</th>
-                    <th>Flat</th>
-                    <th>XXH3</th>
+                    <th>fl</th>
+                    <th>br</th>
                     <th>Sincronizado</th>
                     <th>Acción</th>
                 </tr>
@@ -149,8 +179,8 @@ require __DIR__ . '/header.php';
                     ?>
                         <tr>
                             <td><?= htmlspecialchars(str_replace('/srv/precios/', '', $a['ruta']) . '/' . $a['nombre']) ?></td>
-                            <td><code><?= htmlspecialchars($a['flat'] ?? '-') ?></code></td>
-                            <td><code><?= htmlspecialchars($a['xxh3'] ?? '-') ?></code></td>
+                            <td><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code></td>
+                            <td><code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
                             <td><?= $estaSync ? '<span>✔</span>' : '<span>Pendiente</span>' ?></td>
                             <td>
                                 <form method="POST" action="/dashboard/sucursales" style="display:inline">
@@ -210,7 +240,7 @@ require __DIR__ . '/header.php';
                                 <td><?= htmlspecialchars($s['nombre_sucursal']) ?></td>
                                 <td><span style="color:<?= $enabled ? 'green">Activa' : 'red">Inactiva' ?></span></td>
                                 <td>
-                                    <a href="/dashboard/archivos?sucursal=<?= urlencode($s['id_sucursal']) ?>" role="button" class="secondary outline" style="padding:0.25rem 0.5rem;">Asociar archivos</a>
+                                    <a href="/dashboard/archivos?tab=asociar&sucursal=<?= urlencode($s['id_sucursal']) ?>" role="button" class="secondary outline" style="padding:0.25rem 0.5rem;">Asociar archivos</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

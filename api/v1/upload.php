@@ -4,6 +4,8 @@
  * Endpoint: POST /api/v1/upload/{idSucursal}/{fileName}
  */
 
+require_once __DIR__ . '/../../lib/hash_helper.php';
+
 header('Content-Type: text/plain');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -32,7 +34,7 @@ if ($file['error'] !== UPLOAD_ERR_OK) {
     exit;
 }
 
-$calculatedFlat = substr(hash('xxh3', file_get_contents($file['tmp_name'])), 0, 6);
+$calculatedFlat = flatHash(file_get_contents($file['tmp_name']));
 if ($hFlat && $calculatedFlat !== $hFlat) {
     http_response_code(400);
     echo "ERROR: Fallo de integridad FLAT\nESPERADO: $hFlat\nCALCULADO: $calculatedFlat";
@@ -55,8 +57,8 @@ try {
         $finalFileName,
         $hRuta,
         $file['size'],
-        substr($hFlat ?? $calculatedFlat, 0, 6),
-        substr($hBr ?? '', 0, 6),
+        substr($hFlat ?? $calculatedFlat, 0, 4),
+        substr($hBr ?? '', 0, 4),
         $hFecha ?? date('Y-m-d H:i:s'),
         ($hDesblinde === '1' ? 'true' : 'false'),
     ]);

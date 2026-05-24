@@ -255,8 +255,10 @@ if ($type === 'archivos-listar' && ($_GET['ajax'] ?? false)) {
 
     $whereClause = $q ? "WHERE a.ruta ILIKE ? OR a.nombre ILIKE ?" : "";
     $sql = "
-        SELECT a.id, a.ruta, a.nombre, a.peso, a.status, a.enabled, a.is_desblinde, a.fecha_carga,
-               a.flat, a.br, a.compr_pct, a.fecha_archivo
+        SELECT a.id, a.ruta, a.nombre, a.peso, a.n_descargas, a.status, a.enabled, a.is_desblinde, a.fecha_carga,
+               a.flat, a.br, a.compr_pct, a.fecha_archivo,
+               (SELECT COUNT(*) FROM archivo_sucursal WHERE archivo_id = a.id AND enabled = TRUE) AS total_suc,
+               (SELECT COUNT(*) FROM archivo_sucursal WHERE archivo_id = a.id AND enabled = TRUE AND sync = TRUE) AS sync_suc
         FROM archivos a
         {$whereClause}
         ORDER BY {$orderBy}
@@ -280,9 +282,14 @@ if ($type === 'archivos-listar' && ($_GET['ajax'] ?? false)) {
 
 // === AJAX: search archivos ===
 $search = trim($_GET['q'] ?? '');
+$searchId = (int)($_GET['id'] ?? 0);
 $results = [];
 
-if (strlen($search) >= 3) {
+if ($searchId) {
+    $stmt = $pdo->prepare("SELECT a.id, a.ruta, a.nombre, a.peso, a.flat, a.br, a.xxh3, a.comprimido, a.status, a.fecha_archivo FROM archivos a WHERE a.id = ?");
+    $stmt->execute([$searchId]);
+    $results = $stmt->fetchAll();
+} elseif (strlen($search) >= 3) {
     $sql = "SELECT a.id, a.ruta, a.nombre, a.peso, a.flat, a.br, a.xxh3, a.comprimido, a.status, a.fecha_archivo
             FROM archivos a
             WHERE a.ruta ILIKE ? OR a.nombre ILIKE ?
@@ -427,7 +434,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Auto-activate tab from URL param, else default to listar
     var tabParam = new URLSearchParams(window.location.search).get('tab');
-    var defaultTab = document.querySelector('.tabs a[data-tab="' + (tabParam || 'listar') + '"]');
+    var defaultTabName = tabParam || 'listar';
+    var defaultTab = document.querySelector('.tabs a[data-tab="' + defaultTabName + '"]');
     if (defaultTab) defaultTab.click();
 
     // === Asociar tab ===
@@ -438,6 +446,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const btnRelacionar = document.getElementById('btn-relacionar');
     const mensaje = document.getElementById('mensaje');
     const sucursalAuto = new URLSearchParams(window.location.search).get('sucursal');
+    const archivoAuto = new URLSearchParams(window.location.search).get('id');
     let timer, sucTimer;
 
     function escapeHtml(str) {
@@ -453,7 +462,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var d = parts[0].split('-');
         var t = parts[1].split(':');
         if (d.length < 3 || t.length < 2) return ts;
-        return d[1] + '-' + d[2] + ' ' + t[0] + ':' + t[1];
+        return d[0].slice(-1) + d[1] + d[2] + '.' + t[0] + t[1];
     }
 
     function mostrarMensaje(tipo, texto) {
@@ -493,11 +502,12 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '<div class="table-container"><table><thead><tr><th>Ruta</th><th>Archivo</th><th>Modificado</th><th>Sel.</th></tr></thead><tbody>';
 
         for (const f of data.results) {
+            var isMatch = archivoAuto && String(f.id) === archivoAuto;
             html += '<tr>';
             html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
             html += '<td>' + escapeHtml(f.nombre) + '</td>';
             html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
-            html += '<td><input type="checkbox" class="arch-check" value="' + f.id + '"></td>';
+            html += '<td><input type="checkbox" class="arch-check" value="' + f.id + '"' + (isMatch ? ' checked' : '') + '></td>';
             html += '</tr>';
         }
         html += '</tbody></table></div>';
@@ -527,12 +537,18 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function searchArchivos() {
-        const q = input.value.trim();
-        if (q.length < 3) {
-            archivosResults.innerHTML = '<p>Ingresa al menos 3 caracteres para buscar archivos.</p>';
-            return;
+        var q = input.value.trim();
+        var url;
+        if (archivoAuto && !q) {
+            url = '?id=' + encodeURIComponent(archivoAuto) + '&ajax=1';
+        } else {
+            if (q.length < 3) {
+                archivosResults.innerHTML = '<p>Ingresa al menos 3 caracteres para buscar archivos.</p>';
+                return;
+            }
+            url = '?q=' + encodeURIComponent(q) + '&ajax=1';
         }
-        fetch('?q=' + encodeURIComponent(q) + '&ajax=1')
+        fetch(url)
             .then(function (r) { return r.json(); })
             .then(renderArchivos)
             .catch(function () { archivosResults.innerHTML = '<p style="color:red">Error al buscar.</p>'; });
@@ -551,6 +567,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (sucursalAuto) {
         inputSuc.value = sucursalAuto;
         searchSucursales();
+    }
+
+    if (archivoAuto) {
+        searchArchivos();
     }
 
     btnRelacionar.addEventListener('click', function () {
@@ -713,21 +733,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var rutaArrow = (listarSort === 'ruta') ? ' ▾' : '';
                 var fechaArrow = (listarSort === 'fecha_archivo') ? ' ▾' : '';
-                var html = '<table><thead><tr><th>Ruta' + rutaArrow + '</th><th>Archivo</th><th>Peso</th><th>Flat</th><th>BR</th><th>Comp.</th><th>Modificado' + fechaArrow + '</th><th>Status</th><th>Desblinde</th><th>Activo</th><th>Acción</th></tr></thead><tbody>';
+                var html = '<table><thead><tr><th>Ruta' + rutaArrow + '</th><th>Archivo</th><th>Peso</th><th>Desc</th><th>fl</th><th>br</th><th>Comp.</th><th>Disp</th><th>Modificado' + fechaArrow + '</th><th>Carga</th><th>Status</th><th>Desblinde</th><th>Activo</th></tr></thead><tbody>';
                 for (var i = 0; i < data.results.length; i++) {
                     var f = data.results[i];
                     html += '<tr>';
                     html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
-                    html += '<td>' + escapeHtml(f.nombre) + '</td>';
+            html += '<td><a href="/dashboard/archivo-editar?id=' + f.id + '">' + escapeHtml(f.nombre) + '</a></td>';
                     html += '<td>' + (f.peso ? escapeHtml(f.peso) : '-') + '</td>';
+                    html += '<td>' + (f.n_descargas != null ? f.n_descargas : '0') + '</td>';
                     html += '<td style="font-family:monospace;font-size:0.8rem;">' + (f.flat ? escapeHtml(f.flat.substring(0, 3)) : '-') + '</td>';
                     html += '<td style="font-family:monospace;font-size:0.8rem;">' + (f.br ? escapeHtml(f.br.substring(0, 3)) : '-') + '</td>';
                     html += '<td>' + (f.compr_pct != null ? escapeHtml(f.compr_pct) + '%' : '-') + '</td>';
+                    html += '<td style="font-family:monospace;font-size:0.8rem;">';
+                    if (f.total_suc > 0) {
+                        var pct = Math.round(f.sync_suc / f.total_suc * 100);
+                        html += pct + '% ' + f.sync_suc + '/' + f.total_suc;
+                    } else {
+                        html += '<a href="/dashboard/archivos?tab=asociar&id=' + f.id + '" style="text-decoration:none;color:#888;" title="Asociar a sucursal">+</a>';
+                    }
+                    html += '</td>';
                     html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
+                    html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_carga) + '</td>';
                     html += '<td>' + (f.status === 'ausente' ? '<span style="color:#e65100;font-weight:bold;">Ausente</span>' : escapeHtml(f.status || '-')) + '</td>';
                     html += '<td><input type="checkbox" class="toggle-desblinde" data-id="' + f.id + '"' + (f.is_desblinde ? ' checked' : '') + '></td>';
                     html += '<td><input type="checkbox" class="toggle-enabled" data-id="' + f.id + '"' + (f.enabled ? ' checked' : '') + '></td>';
-                    html += '<td><a href="/dashboard/archivo-editar?id=' + f.id + '" class="secondary outline" style="padding:0.2rem 0.5rem;font-size:0.8rem;text-decoration:none;">Editar</a></td>';
                     html += '</tr>';
                 }
                 html += '</tbody></table>';
@@ -805,15 +834,22 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
+    // === Listar tab: load on click & search ===
     document.querySelector('.tabs a[data-tab="listar"]').addEventListener('click', function () {
         loadListar(1);
     });
 
     let listarSearchTimer;
-    document.getElementById('q-listar').addEventListener('input', function () {
-        clearTimeout(listarSearchTimer);
-        listarSearchTimer = setTimeout(function () { loadListar(1); }, 300);
-    });
+    var qListar = document.getElementById('q-listar');
+    if (qListar) {
+        qListar.addEventListener('input', function () {
+            clearTimeout(listarSearchTimer);
+            listarSearchTimer = setTimeout(function () { loadListar(1); }, 300);
+        });
+    }
+
+    // Load immediately if listar is the default tab
+    if (defaultTabName === 'listar') loadListar(1);
 
     // === Registrar AJAX ===
     var registrarForm = document.getElementById('registrar-form');
