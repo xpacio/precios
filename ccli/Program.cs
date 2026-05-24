@@ -12,7 +12,7 @@ if (!File.Exists(configPath))
 }
 
 var json = File.ReadAllText(configPath);
-var config = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+var config = JsonSerializer.Deserialize(json, AppJsonContext.Default.DictionaryStringString);
 if (config == null)
 {
     Console.Error.WriteLine("Error: appsettings.json inválido");

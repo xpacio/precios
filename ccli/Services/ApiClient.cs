@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Text.Json;
 using Ccli.Models;
 
 namespace Ccli.Services;
@@ -14,9 +13,7 @@ public class ApiClient(HttpClient http, string apiKey)
         var res = await http.SendAsync(req);
         res.EnsureSuccessStatusCode();
 
-        var body = await res.Content.ReadFromJsonAsync<PendingResponse>(
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-        );
+        var body = await res.Content.ReadFromJsonAsync(AppJsonContext.Default.PendingResponse);
 
         return body?.Archivos ?? [];
     }
@@ -44,7 +41,10 @@ public class ApiClient(HttpClient http, string apiKey)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/confirm");
         req.Headers.Add("X-API-Key", apiKey);
-        req.Content = JsonContent.Create(new { sucursal_id = sucursalId, nombre });
+        req.Content = JsonContent.Create(
+            new ConfirmRequest { SucursalId = sucursalId, Nombre = nombre },
+            AppJsonContext.Default.ConfirmRequest
+        );
 
         var res = await http.SendAsync(req);
         return res.IsSuccessStatusCode;
