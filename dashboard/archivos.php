@@ -446,7 +446,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const btnRelacionar = document.getElementById('btn-relacionar');
     const mensaje = document.getElementById('mensaje');
     const sucursalAuto = new URLSearchParams(window.location.search).get('sucursal');
-    const archivoAuto = new URLSearchParams(window.location.search).get('id');
+    const archivoIdAuto = new URLSearchParams(window.location.search).get('id');
+    const archivoQAuto = new URLSearchParams(window.location.search).get('q');
     let timer, sucTimer;
 
     function escapeHtml(str) {
@@ -502,7 +503,7 @@ document.addEventListener('DOMContentLoaded', function () {
         html += '<div class="table-container"><table><thead><tr><th>Ruta</th><th>Archivo</th><th>Modificado</th><th>Sel.</th></tr></thead><tbody>';
 
         for (const f of data.results) {
-            var isMatch = archivoAuto && String(f.id) === archivoAuto;
+            var isMatch = archivoIdAuto && String(f.id) === archivoIdAuto;
             html += '<tr>';
             html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
             html += '<td>' + escapeHtml(f.nombre) + '</td>';
@@ -539,8 +540,8 @@ document.addEventListener('DOMContentLoaded', function () {
     function searchArchivos() {
         var q = input.value.trim();
         var url;
-        if (archivoAuto && !q) {
-            url = '?id=' + encodeURIComponent(archivoAuto) + '&ajax=1';
+        if (archivoIdAuto) {
+            url = '?id=' + encodeURIComponent(archivoIdAuto) + '&ajax=1';
         } else {
             if (q.length < 3) {
                 archivosResults.innerHTML = '<p>Ingresa al menos 3 caracteres para buscar archivos.</p>';
@@ -569,7 +570,8 @@ document.addEventListener('DOMContentLoaded', function () {
         searchSucursales();
     }
 
-    if (archivoAuto) {
+    if (archivoIdAuto) {
+        if (archivoQAuto) input.value = archivoQAuto;
         searchArchivos();
     }
 
@@ -749,7 +751,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         var pct = Math.round(f.sync_suc / f.total_suc * 100);
                         html += pct + '% ' + f.sync_suc + '/' + f.total_suc;
                     } else {
-                        html += '<a href="/dashboard/archivos?tab=asociar&id=' + f.id + '" style="text-decoration:none;color:#888;" title="Asociar a sucursal">+</a>';
+                        html += '<a href="/dashboard/archivos?tab=asociar&id=' + f.id + '&q=' + encodeURIComponent(f.nombre) + '" style="text-decoration:none;color:#888;" title="Asociar a sucursal">+</a>';
                     }
                     html += '</td>';
                     html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
