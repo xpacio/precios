@@ -5,9 +5,23 @@ $pageTitle = 'Sincronización';
 $pdo = getDB();
 
 $totalFiles = $pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
+$presentes = $pdo->query("SELECT COUNT(*) FROM archivos WHERE enabled = TRUE AND status = 'ready'")->fetchColumn();
 $disabled = $pdo->query("SELECT COUNT(*) FROM archivos WHERE enabled = FALSE")->fetchColumn();
+$ausentes = $pdo->query("SELECT COUNT(*) FROM archivos WHERE enabled = TRUE AND status = 'missing'")->fetchColumn();
 $updating = $pdo->query("SELECT COUNT(*) FROM archivos WHERE status = 'updating'")->fetchColumn();
+$cambiados = $pdo->query("SELECT COUNT(*) FROM archivos WHERE updated_at > NOW() - INTERVAL '1 hour'")->fetchColumn();
 $ultimaSync = $pdo->query("SELECT MAX(updated_at) FROM archivos")->fetchColumn();
+
+$sucPendientes = $pdo->query("
+    SELECT s.id_sucursal, s.nombre_sucursal, COUNT(*) AS num_pendientes
+    FROM archivo_sucursal asu
+    JOIN archivos a ON a.id = asu.archivo_id
+    JOIN sucursales s ON s.id_sucursal = asu.sucursal_id
+    WHERE asu.enabled = TRUE AND asu.sync = FALSE AND a.enabled = TRUE
+    GROUP BY s.id_sucursal, s.nombre_sucursal
+    ORDER BY num_pendientes DESC
+    LIMIT 20
+")->fetchAll();
 
 require __DIR__ . '/header.php';
 ?>
@@ -20,12 +34,24 @@ require __DIR__ . '/header.php';
         <h3><?= number_format($totalFiles) ?></h3>
     </article>
     <article class="stat-card">
+        <header>Presentes</header>
+        <h3 style="color: #2e7d32;"><?= number_format($presentes) ?></h3>
+    </article>
+    <article class="stat-card">
         <header>Deshabilitados</header>
         <h3 style="color: #c62828;"><?= number_format($disabled) ?></h3>
     </article>
     <article class="stat-card">
+        <header>Ausentes</header>
+        <h3 style="color: #c62828;"><?= number_format($ausentes) ?></h3>
+    </article>
+    <article class="stat-card">
         <header>Actualizando</header>
         <h3 style="color: <?= $updating > 0 ? '#e65100' : '#2e7d32' ?>;"><?= number_format($updating) ?></h3>
+    </article>
+    <article class="stat-card">
+        <header>Cambiados (última hora)</header>
+        <h3 style="color: #e65100;"><?= number_format($cambiados) ?></h3>
     </article>
     <article class="stat-card">
         <header>Última actualización</header>
@@ -33,7 +59,10 @@ require __DIR__ . '/header.php';
     </article>
 </div>
 
-<button id="btnSync" onclick="startSync()">🔄 Sincronizar Ahora</button>
+<div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+    <button id="btnSync" onclick="startSync()">🔄 Sincronizar Ahora</button>
+    <button id="btnVerify" onclick="startVerify()" class="secondary">🔍 Verificar y Comprimir</button>
+</div>
 
 <div id="syncLoading" style="display:none; margin-top: 1rem;">
     <progress indeterminate></progress>
@@ -41,6 +70,39 @@ require __DIR__ . '/header.php';
 </div>
 
 <div id="syncResults" style="display:none; margin-top: 1rem;"></div>
+<div id="verifyResults" style="display:none; margin-top: 1rem;"></div>
+
+<hr>
+
+<h2>Sucursales con Pendientes</h2>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Sucursal</th>
+                <th>Nombre</th>
+                <th>Archivos pendientes</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($sucPendientes)): ?>
+                <tr><td colspan="4">No hay pendientes</td></tr>
+            <?php else:
+                foreach ($sucPendientes as $r): ?>
+                    <tr>
+                        <td><code><?= htmlspecialchars($r['id_sucursal']) ?></code></td>
+                        <td><?= htmlspecialchars($r['nombre_sucursal']) ?></td>
+                        <td><span class="badge-warn"><?= $r['num_pendientes'] ?></span></td>
+                        <td>
+                            <a href="/dashboard/archivos?sucursal=<?= urlencode($r['id_sucursal']) ?>" role="button" class="secondary outline" style="padding:0.25rem 0.5rem;font-size:0.8rem">Ver</a>
+                        </td>
+                    </tr>
+                <?php endforeach;
+            endif; ?>
+        </tbody>
+    </table>
+</div>
 
 <script>
 async function startSync() {
@@ -82,6 +144,29 @@ async function startSync() {
         loading.style.display = 'none';
         results.innerHTML = `<div class="flash flash-error">Error de conexión: ${err.message}</div>`;
         results.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function startVerify() {
+    const btn = document.getElementById('btnVerify');
+    const results = document.getElementById('verifyResults');
+
+    btn.disabled = true;
+    results.style.display = 'none';
+    results.innerHTML = '<progress indeterminate></progress><p>Verificando y comprimiendo archivos...</p>';
+    results.style.display = 'block';
+
+    try {
+        const resp = await fetch('/api/v1/verify', { method: 'POST' });
+        const text = await resp.text();
+
+        let html = `<div class="flash flash-${resp.ok ? 'success' : 'error'}">`;
+        html += `<pre style="margin:0">${htmlspecialchars(text)}</pre></div>`;
+        results.innerHTML = html;
+    } catch (err) {
+        results.innerHTML = `<div class="flash flash-error">Error: ${err.message}</div>`;
     } finally {
         btn.disabled = false;
     }
