@@ -28,6 +28,21 @@ if (!$arch) {
     exit;
 }
 
+// === POST: toggle sync (AJAX) ===
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggle-sync' && ($_POST['sucursal_id'] ?? '')) {
+    header('Content-Type: application/json');
+    $sid = $_POST['sucursal_id'];
+    $sync = !empty($_POST['sync']);
+    try {
+        $pdo->prepare("UPDATE archivo_sucursal SET sync = ? WHERE archivo_id = ? AND sucursal_id = ?")
+            ->execute([$sync ? 't' : 'f', $id, $sid]);
+        echo json_encode(['ok' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // === POST: desasociar sucursal ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'desasociar') {
     $sucursalId = $_POST['sucursal_id'] ?? '';
@@ -129,7 +144,7 @@ require __DIR__ . '/header.php';
                     <tr>
                         <td><a href="http://precios.servicios.care/dashboard/sucursales?sucursal=<?= urlencode($s['id_sucursal']) ?>"><code><?= htmlspecialchars($s['id_sucursal']) ?></code></a></td>
                         <td><?= htmlspecialchars($s['nombre_sucursal']) ?></td>
-                        <td><?= ($s['sync'] === 't' || $s['sync'] === true) ? '<span style="color:green;font-weight:bold;">✔ Sincronizado</span>' : '<span style="color:#e65100;">Pendiente</span>' ?></td>
+                        <td><input type="checkbox" class="toggle-sync" data-id="<?= htmlspecialchars($s['id_sucursal']) ?>"<?= ($s['sync'] === 't' || $s['sync'] === true) ? ' checked' : '' ?>></td>
                         <td>
                             <form method="POST" style="display:inline">
                                 <input type="hidden" name="action" value="desasociar">
@@ -143,5 +158,24 @@ require __DIR__ . '/header.php';
         </tbody>
     </table>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.toggle-sync').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var formData = new FormData();
+            formData.append('action', 'toggle-sync');
+            formData.append('sucursal_id', this.dataset.id);
+            formData.append('sync', this.checked ? '1' : '');
+            fetch('/dashboard/archivo-editar?id=<?= $id ?>', { method: 'POST', body: formData })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.ok) cb.checked = !cb.checked;
+                })
+                .catch(function () { cb.checked = !cb.checked; });
+        });
+    });
+});
+</script>
 
 <?php require __DIR__ . '/footer.php'; ?>
