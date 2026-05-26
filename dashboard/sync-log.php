@@ -6,12 +6,19 @@ $pdo = getDB();
 
 // Filtro por modo
 $modeFilter = $_GET['mode'] ?? '';
+$daysFilter = (int)($_GET['days'] ?? 7);
+$clauses = [];
 $params = [];
-$where = '';
-if ($modeFilter && in_array($modeFilter, ['full', 'full-fast', 'selected'], true)) {
-    $where = 'WHERE mode = ?';
+
+if ($modeFilter && in_array($modeFilter, ['full', 'full-fast', 'selected', 'one'], true)) {
+    $clauses[] = 'mode = ?';
     $params[] = $modeFilter;
 }
+if ($daysFilter > 0) {
+    $clauses[] = 'created_at >= NOW() - INTERVAL \'' . $daysFilter . ' days\'';
+}
+
+$where = $clauses ? 'WHERE ' . implode(' AND ', $clauses) : '';
 
 // Últimos 100 registros
 $sql = "SELECT id, mode, params, status, total, transferidos, procesados, omitidos, errores, exit_code, duration_sec, created_at
@@ -22,15 +29,17 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $logs = $stmt->fetchAll();
 
-$resumen = $pdo->query("
+$stmt = $pdo->prepare("
     SELECT mode, COUNT(*) AS total_ejecuciones,
            SUM(total) AS total_archivos,
            SUM(transferidos) AS total_transferidos,
            SUM(procesados) AS total_procesados
-    FROM sync_log
+    FROM sync_log $where
     GROUP BY mode
     ORDER BY mode
-")->fetchAll();
+");
+$stmt->execute($params);
+$resumen = $stmt->fetchAll();
 
 function fmtStatus(string $s): string {
     return match ($s) {
@@ -78,11 +87,16 @@ require __DIR__ . '/header.php';
     </div>
 </article>
 
-<div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;">
-    <a href="/dashboard/sync-log" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">Todos</a>
-    <a href="?mode=full" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">full</a>
-    <a href="?mode=full-fast" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">full-fast</a>
-    <a href="?mode=selected" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">selected</a>
+<div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;">
+    <span style="font-size:0.85rem;color:#888;">Filtrar:</span>
+    <a href="/dashboard/sync-log?days=7" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">7 días</a>
+    <a href="/dashboard/sync-log?days=0" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">Todo</a>
+    <span style="font-size:0.85rem;color:#888;margin-left:0.5rem;">Modo:</span>
+    <a href="/dashboard/sync-log?days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">todos</a>
+    <a href="?mode=full&amp;days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">full</a>
+    <a href="?mode=full-fast&amp;days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">full-fast</a>
+    <a href="?mode=selected&amp;days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">selected</a>
+    <a href="?mode=one&amp;days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">one</a>
 </div>
 
 <div class="table-container">
