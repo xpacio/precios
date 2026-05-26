@@ -183,7 +183,7 @@ require __DIR__ . '/header.php';
                     <th>Archivo</th>
                     <th>fl</th>
                     <th>br</th>
-                    <th title="Desblinde">D</th>
+                    <th>Desblinde</th>
                     <th>Sync</th>
                     <th>Acción</th>
                 </tr>
@@ -199,7 +199,7 @@ require __DIR__ . '/header.php';
                             <td><?= htmlspecialchars(str_replace('/srv/precios/', '', $a['ruta']) . '/' . $a['nombre']) ?></td>
                             <td><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code></td>
                             <td><code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
-                            <td style="text-align:center;"><?= ($a['is_desblinde'] === 't' || $a['is_desblinde'] === true) ? '<span style="color:#e65100;font-weight:bold;" title="Desblinde">D</span>' : '' ?></td>
+                            <td><?= ($a['is_desblinde'] === 't' || $a['is_desblinde'] === true) ? '<span style="color:#e65100;font-weight:bold;">desblinde</span>' : '' ?></td>
                             <td><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>"<?= $estaSync ? ' checked' : '' ?>></td>
                             <td>
                                 <form method="POST" action="/dashboard/sucursales" style="display:inline">
