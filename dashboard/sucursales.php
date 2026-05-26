@@ -141,7 +141,7 @@ require __DIR__ . '/header.php';
         echo '<p>style="color:red"">Sucursal no encontrada</p>';
     } else {
         $stmt = $pdo->prepare("
-            SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.peso, asu.sync, asu.created_at AS asociado_desde
+            SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.peso, a.is_desblinde, asu.sync, asu.created_at AS asociado_desde
             FROM archivo_sucursal asu
             JOIN archivos a ON a.id = asu.archivo_id
             WHERE asu.sucursal_id = ? AND asu.enabled = TRUE
@@ -172,21 +172,25 @@ require __DIR__ . '/header.php';
         </form>
     </article>
 
+    <style>
+        .compact-table td, .compact-table th { padding:0.2rem 0.5rem !important; }
+    </style>
     <h3>Archivos Asociados (<?= count($asociados) ?>)</h3>
     <div class="table-container">
-        <table>
+        <table class="compact-table" style="font-size:0.85rem;">
             <thead>
                 <tr>
                     <th>Archivo</th>
                     <th>fl</th>
                     <th>br</th>
+                    <th title="Desblinde">D</th>
                     <th>Sync</th>
                     <th>Acción</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($asociados)): ?>
-                    <tr><td colspan="5">Sin archivos asociados</td></tr>
+                    <tr><td colspan="6">Sin archivos asociados</td></tr>
                 <?php else: ?>
                     <?php foreach ($asociados as $a):
                         $estaSync = ($a['sync'] === 't' || $a['sync'] === true);
@@ -195,6 +199,7 @@ require __DIR__ . '/header.php';
                             <td><?= htmlspecialchars(str_replace('/srv/precios/', '', $a['ruta']) . '/' . $a['nombre']) ?></td>
                             <td><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code></td>
                             <td><code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
+                            <td style="text-align:center;"><?= ($a['is_desblinde'] === 't' || $a['is_desblinde'] === true) ? '<span style="color:#e65100;font-weight:bold;" title="Desblinde">D</span>' : '' ?></td>
                             <td><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>"<?= $estaSync ? ' checked' : '' ?>></td>
                             <td>
                                 <form method="POST" action="/dashboard/sucursales" style="display:inline">
