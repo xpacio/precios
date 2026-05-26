@@ -61,11 +61,15 @@ $outputCompleto = $rsyncTexto . "\n" . implode("\n", $compresionLog);
 
 $elapsed = round(microtime(true) - $startTime, 2);
 
+$transferidos = extractTransferidos($rsyncOutput);
+logSync($pdo, 'full-fast', '--fast all.ls', count($archivos), $transferidos, $procesados, $omitidos, $errores, $exitCode, $elapsed);
+
 echo json_encode([
     'status' => ($exitCode === 0) ? 'OK' : 'WARNING',
     'elapsed' => $elapsed . 's',
     'exit_code' => $exitCode,
     'enabled_count' => count($archivos),
+    'transferidos' => $transferidos,
     'procesados' => $procesados,
     'omitidos' => $omitidos,
     'errores' => $errores,

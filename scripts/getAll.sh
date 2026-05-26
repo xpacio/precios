@@ -68,9 +68,13 @@ fi
 # === Fast mode: rsync --files-from ===
 if $FAST_MODE; then
     log "INFO" "Modo rápido: rsync --files-from"
-    rsync -tirvz --files-from="$PRECIOS_FILE" -e ssh "$REMOTE_HOST:$REMOTE_PATH" "$DEST_DIR/" < /dev/null
+    RSYNC_OUTPUT=$(rsync -tirvz --files-from="$PRECIOS_FILE" -e ssh "$REMOTE_HOST:$REMOTE_PATH" "$DEST_DIR/" < /dev/null 2>&1) || true
+    RSYNC_EXIT=$?
+    echo "$RSYNC_OUTPUT"
+    TRANSFERIDOS_COUNT=$(echo "$RSYNC_OUTPUT" | grep -c '^>f' || true)
+    echo "[TRANSFERIDOS] $TRANSFERIDOS_COUNT"
     chown -R www-data:www-data "$DEST_DIR" 2>/dev/null || true
-    exit $?
+    exit $RSYNC_EXIT
 fi
 
 # Leer el archivo línea por línea y procesar cada archivo

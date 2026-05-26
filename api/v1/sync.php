@@ -77,12 +77,16 @@ $outputText .= "\n" . implode("\n", $compresionLog);
 
 $elapsed = round(microtime(true) - $startTime, 2);
 
+$transferidos = extractTransferidos($output);
+logSync($pdo, 'full', 'all.ls', count($archivos), $transferidos, $procesados, $omitidos, $errores, $exitCode, $elapsed);
+
 echo json_encode([
     'status' => $exitCode === 0 ? 'OK' : 'WARNING',
     'elapsed' => $elapsed . 's',
     'exit_code' => $exitCode,
     'enabled_count' => count($archivos),
     'disabled_count' => $disableCount,
+    'transferidos' => $transferidos,
     'procesados' => $procesados,
     'omitidos' => $omitidos,
     'errores' => $errores,

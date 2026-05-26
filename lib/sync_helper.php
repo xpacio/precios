@@ -2,6 +2,32 @@
 
 require_once __DIR__ . '/hash_helper.php';
 
+function extractTransferidos(array $output): int
+{
+    foreach ($output as $line) {
+        if (preg_match('/\[TRANSFERIDOS\]\s+(\d+)/', $line, $m)) {
+            return (int)$m[1];
+        }
+    }
+    $count = 0;
+    foreach ($output as $line) {
+        if (preg_match('/\[i2\]/', $line)) $count++;
+    }
+    return $count;
+}
+
+function logSync(PDO $pdo, string $mode, string $params, int $total, int $transferidos, int $procesados, int $omitidos, int $errores, int $exitCode, float $durationSec): void
+{
+    $status = 'ok';
+    if ($exitCode !== 0) $status = 'warning';
+    if ($errores > 0) $status = 'error';
+
+    $pdo->prepare("
+        INSERT INTO sync_log (mode, params, status, total, transferidos, procesados, omitidos, errores, exit_code, duration_sec)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ")->execute([$mode, $params, $status, $total, $transferidos, $procesados, $omitidos, $errores, $exitCode, $durationSec]);
+}
+
 function processAndCompressFile(string $ruta, string $nombre): array
 {
     $baseDir = '/srv/precios';

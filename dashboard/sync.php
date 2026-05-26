@@ -28,7 +28,7 @@ if (($_GET['type'] ?? '') === 'search-files') {
 $totalFiles = $pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
 $disabled = $pdo->query("SELECT COUNT(*) FROM archivos WHERE enabled = FALSE")->fetchColumn();
 $updating = $pdo->query("SELECT COUNT(*) FROM archivos WHERE status = 'updating'")->fetchColumn();
-$ultimaSync = $pdo->query("SELECT MAX(updated_at) FROM archivos")->fetchColumn();
+$ultimaSync = $pdo->query("SELECT MAX(created_at) FROM sync_log")->fetchColumn();
 
 require __DIR__ . '/header.php';
 ?>

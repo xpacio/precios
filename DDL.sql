@@ -78,3 +78,18 @@ VALUES ('precios_api_key_2024', 'API Key por defecto del administrador', 1, TRUE
 
 INSERT INTO sucursales (id_sucursal, nombre_sucursal, enabled) VALUES
 ('00000', 'Sucursal de Pruebas', TRUE);
+
+CREATE TABLE sync_log (
+    id SERIAL PRIMARY KEY,
+    mode VARCHAR(20) NOT NULL,
+    params VARCHAR(100) DEFAULT '',
+    status VARCHAR(10) NOT NULL,
+    total INT DEFAULT 0,
+    transferidos INT DEFAULT 0,
+    procesados INT DEFAULT 0,
+    omitidos INT DEFAULT 0,
+    errores INT DEFAULT 0,
+    exit_code INT DEFAULT 0,
+    duration_sec NUMERIC(8,2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

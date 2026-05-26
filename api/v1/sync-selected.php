@@ -71,11 +71,15 @@ foreach ($files as $f) {
 
 $elapsed = round(microtime(true) - $startTime, 2);
 
+$transferidos = extractTransferidos($rsyncOutput);
+logSync($pdo, 'selected', '--fast selected.ls', count($files), $transferidos, $procesados, $omitidos, $errores, $exitCode, $elapsed);
+
 echo json_encode([
     'status' => $exitCode === 0 ? 'OK' : 'WARNING',
     'elapsed' => $elapsed . 's',
     'rsync_exit' => $exitCode,
     'total' => count($files),
+    'transferidos' => $transferidos,
     'procesados' => $procesados,
     'omitidos' => $omitidos,
     'errores' => $errores,
