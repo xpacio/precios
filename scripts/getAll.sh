@@ -68,8 +68,10 @@ fi
 # === Fast mode: rsync --files-from ===
 if $FAST_MODE; then
     log "INFO" "Modo rápido: rsync --files-from"
-    RSYNC_OUTPUT=$(rsync -tirvz --files-from="$PRECIOS_FILE" -e ssh "$REMOTE_HOST:$REMOTE_PATH" "$DEST_DIR/" < /dev/null 2>&1) || true
+    set +e
+    RSYNC_OUTPUT=$(rsync -tirvz --files-from="$PRECIOS_FILE" -e ssh "$REMOTE_HOST:$REMOTE_PATH" "$DEST_DIR/" < /dev/null 2>&1)
     RSYNC_EXIT=$?
+    set -e
     echo "$RSYNC_OUTPUT"
     TRANSFERIDOS_COUNT=$(echo "$RSYNC_OUTPUT" | grep -c '^>f' || true)
     echo "[TRANSFERIDOS] $TRANSFERIDOS_COUNT"
@@ -94,12 +96,19 @@ while IFS= read -r REMOTE_FILE || [[ -n "$REMOTE_FILE" ]]; do
         log "i1" "$REMOTE_FILE"
         SUB_DIR=$(dirname "$REMOTE_FILE")
         mkdir -p "$DEST_DIR/$SUB_DIR"
-        if rsync -tirz -e ssh "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/$SUB_DIR/" < /dev/null; then
-            TRANSFERIDOS=$((TRANSFERIDOS + 1))
-            log "i2" "Transferido correctamente: $REMOTE_FILE"
+        set +e
+        RSYNC_OUT=$(rsync -tirz -e ssh "$REMOTE_HOST:$REMOTE_PATH$REMOTE_FILE" "$DEST_DIR/$SUB_DIR/" < /dev/null 2>&1)
+        RSYNC_EXIT=$?
+        set -e
+        echo "$RSYNC_OUT"
+        if [[ $RSYNC_EXIT -eq 0 ]]; then
+            if echo "$RSYNC_OUT" | grep -q '^>f'; then
+                TRANSFERIDOS=$((TRANSFERIDOS + 1))
+                log "i2" "Transferido correctamente: $REMOTE_FILE"
+            fi
         else
             ERRORES=$((ERRORES + 1))
-            log "e2" "Falló la transferencia de: $REMOTE_FILE (código: $?)"
+            log "e2" "Falló la transferencia de: $REMOTE_FILE (código: $RSYNC_EXIT)"
         fi
     else
         NO_ENCONTRADOS=$((NO_ENCONTRADOS + 1))
