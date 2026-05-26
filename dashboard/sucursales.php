@@ -183,7 +183,7 @@ require __DIR__ . '/header.php';
                     <th>Archivo</th>
                     <th>fl</th>
                     <th>br</th>
-                    <th>Desblinde</th>
+                    <th style="text-align:center;">Desblinde</th>
                     <th>Sync</th>
                     <th>Acción</th>
                 </tr>

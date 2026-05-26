@@ -15,7 +15,7 @@ if ($baseSeg === 'api' && ($segments[1] ?? null) === 'v1') {
     $idSucursal = $segments[3] ?? null;
     $fileName   = $segments[4] ?? null;
 
-    if (in_array($controller, ['sync', 'sync-fast', 'sync-selected', 'auth'], true)) {
+    if (in_array($controller, ['sync', 'sync-fast', 'sync-selected', 'auth', 'archivos-fuente-full'], true)) {
         // internal endpoints, no API key required
     } else {
         require_once __DIR__ . '/api/v1/middleware.php';
