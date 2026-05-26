@@ -86,15 +86,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggl
 // === POST: sync-one (AJAX) ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'sync-one') {
     header('Content-Type: application/json');
+    $startTime = microtime(true);
     $relPath = $arch['ruta'] . '/' . $arch['nombre'];
     $getOneScript = realpath(__DIR__ . '/../scripts/getOne.sh');
     $cmd = "sudo " . escapeshellarg($getOneScript) . " --fast " . escapeshellarg($relPath) . " 2>&1";
     exec($cmd, $output, $exitCode);
+    $elapsed = round(microtime(true) - $startTime, 2);
     if ($exitCode !== 0) {
+        logSync($pdo, 'one', '--fast', 1, 0, 0, 0, 1, $exitCode, $elapsed);
         echo json_encode(['ok' => false, 'mensaje' => 'Error al sincronizar: ' . implode("\n", $output)]);
         exit;
     }
     $result = processAndCompressFile($arch['ruta'], $arch['nombre']);
+    $procesados = $result['status'] === 'OK' ? 1 : 0;
+    $omitidos = $result['status'] === 'SKIP' ? 1 : 0;
+    $errores = $result['status'] === 'ERROR' ? 1 : 0;
+    logSync($pdo, 'one', '--fast', 1, 1, $procesados, $omitidos, $errores, $exitCode, $elapsed);
     $msg = $result['status'] === 'OK' ? 'Sincronizado y comprimido' : 'Sincronizado (' . $result['mensaje'] . ')';
     echo json_encode(['ok' => true, 'mensaje' => $msg]);
     exit;
