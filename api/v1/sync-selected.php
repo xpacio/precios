@@ -10,6 +10,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_once __DIR__ . '/../../lib/sync_helper.php';
 
+$pdo = getDB();
+
 $input = json_decode(file_get_contents('php://input'), true);
 $files = $input['files'] ?? [];
 
