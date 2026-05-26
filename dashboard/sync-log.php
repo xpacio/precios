@@ -10,7 +10,7 @@ $daysFilter = (int)($_GET['days'] ?? 7);
 $clauses = [];
 $params = [];
 
-if ($modeFilter && in_array($modeFilter, ['full', 'full-fast', 'selected', 'one'], true)) {
+if ($modeFilter && in_array($modeFilter, ['full', 'full-fast', 'selected', 'one', 'cron-full-fast'], true)) {
     $clauses[] = 'mode = ?';
     $params[] = $modeFilter;
 }
@@ -97,6 +97,7 @@ require __DIR__ . '/header.php';
     <a href="?mode=full-fast&amp;days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">full-fast</a>
     <a href="?mode=selected&amp;days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">selected</a>
     <a href="?mode=one&amp;days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">one</a>
+    <a href="?mode=cron-full-fast&amp;days=<?= $daysFilter ?>" role="button" class="secondary outline" style="padding:0.25rem 0.75rem;">cron</a>
 </div>
 
 <div class="table-container">
