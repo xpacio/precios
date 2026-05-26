@@ -3,7 +3,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="$SCRIPT_DIR/log_precios_$(date '+%Y%m').log"
-PRECIOS_FILE="$SCRIPT_DIR/archivosFuente.txt"
+FAST_MODE=false
+
+if [[ $# -eq 0 ]]; then
+    echo "Uso: $0 [--fast] <archivo_fuente>"
+    exit 1
+fi
+
+if [[ "$1" == "--fast" ]]; then
+    FAST_MODE=true
+    shift
+fi
+
+if [[ $# -eq 0 ]]; then
+    echo "Uso: $0 [--fast] <archivo_fuente>"
+    exit 1
+fi
+
+PRECIOS_FILE="$SCRIPT_DIR/$1"
 DEST_DIR="/srv/precios"
 REMOTE_HOST="admin@respaldos.camposreyeros.com"
 REMOTE_PATH="/volume1/homes/Precios/MASTERS/Mily-Master230716/"
@@ -49,7 +66,7 @@ if ! ssh -q -o BatchMode=yes -o ConnectTimeout=2 "$REMOTE_HOST" exit; then
 fi
 
 # === Fast mode: rsync --files-from ===
-if [[ "${1:-}" == "--files-from" ]]; then
+if $FAST_MODE; then
     log "INFO" "Modo rápido: rsync --files-from"
     rsync -tirvz --files-from="$PRECIOS_FILE" -e ssh "$REMOTE_HOST:$REMOTE_PATH" "$DEST_DIR/" < /dev/null
     chown -R www-data:www-data "$DEST_DIR" 2>/dev/null || true

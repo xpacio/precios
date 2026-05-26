@@ -187,6 +187,29 @@ function fmtFecha(ts) {
     return d[0].slice(-1) + d[1] + d[2] + '.' + t[0] + t[1];
 }
 
+function timeago(ts) {
+    if (!ts) return '-';
+    var diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+    if (diff < 0) return '0s';
+    var s = diff;
+    var m = Math.floor(s / 60);
+    var h = Math.floor(s / 3600);
+    var d = Math.floor(s / 86400);
+    var M = Math.floor(d / 30);
+    var a = Math.floor(d / 365);
+    if (s < 60) return s + 's';
+    if (m < 60) return m + 'm';
+    if (h < 2) return h + 'h' + (m % 60 ? (m % 60) + 'm' : '');
+    if (h < 24) return h + 'h+';
+    if (d === 1) return '1d';
+    if (d === 2) return '2d+';
+    if (d < 30) return d + 'd+';
+    if (M === 1) return '1M';
+    if (M < 12) return M + 'M+';
+    if (a === 1) return '1a';
+    return a + 'a+';
+}
+
 // === Sync Selectivo ===
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('selSearch');
@@ -210,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.5rem;border-radius:4px;cursor:pointer;" onmouseenter="this.style.background=\'var(--card-background-color)\'" onmouseleave="this.style.background=\'\'">';
             html += '<input type="checkbox" class="sel-file-cb" data-ruta="' + htmlspecialchars(f.ruta) + '" data-nombre="' + htmlspecialchars(f.nombre) + '" style="flex-shrink:0;">';
             html += '<span style="font-size:0.85rem;">' + htmlspecialchars(label) + '</span>';
-            html += '<span style="font-size:0.75rem;color:#999;margin-left:0.75rem;">' + fmtFecha(f.fecha_archivo) + '</span>';
+            html += '<span style="font-size:0.75rem;color:#999;margin-left:0.75rem;">' + fmtFecha(f.fecha_archivo) + ' (' + timeago(f.fecha_archivo) + ')' + '</span>';
             html += '<span style="margin-left:auto;font-size:0.75rem;color:#888;">' + htmlspecialchars(f.status) + '</span>';
             html += '</label>';
         }

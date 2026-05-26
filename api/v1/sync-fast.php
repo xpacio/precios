@@ -20,7 +20,7 @@ $stmt = $pdo->query("SELECT ruta, nombre FROM archivos WHERE enabled = TRUE ORDE
 $archivos = $stmt->fetchAll();
 
 $baseScripts = realpath(__DIR__ . '/../../scripts');
-$fuenteFile = $baseScripts . '/archivosFuente.txt';
+$fuenteFile = $baseScripts . '/all.ls';
 $getAllScript = $baseScripts . '/getAll.sh';
 
 $lines = [];
@@ -31,7 +31,7 @@ foreach ($archivos as $a) {
 file_put_contents($fuenteFile, implode("\n", $lines) . "\n");
 
 $rsyncOutput = [];
-exec("sudo " . escapeshellarg($getAllScript) . " --files-from 2>&1", $rsyncOutput, $exitCode);
+exec("sudo " . escapeshellarg($getAllScript) . " --fast " . escapeshellarg('all.ls') . " 2>&1", $rsyncOutput, $exitCode);
 
 $rsyncTexto = implode("\n", $rsyncOutput);
 

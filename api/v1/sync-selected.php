@@ -22,7 +22,7 @@ if (empty($files)) {
 $startTime = microtime(true);
 
 $baseScripts = realpath(__DIR__ . '/../../scripts');
-$fuenteFile = $baseScripts . '/archivosFuente.txt';
+$fuenteFile = $baseScripts . '/selected.ls';
 $getAllScript = $baseScripts . '/getAll.sh';
 
 $lines = [];
@@ -32,7 +32,7 @@ foreach ($files as $f) {
 file_put_contents($fuenteFile, implode("\n", $lines) . "\n");
 
 $rsyncOutput = [];
-exec("sudo " . escapeshellarg($getAllScript) . " --files-from 2>&1", $rsyncOutput, $exitCode);
+exec("sudo " . escapeshellarg($getAllScript) . " --fast " . escapeshellarg('selected.ls') . " 2>&1", $rsyncOutput, $exitCode);
 
 $resultados = [];
 $procesados = 0;

@@ -466,6 +466,29 @@ document.addEventListener('DOMContentLoaded', function () {
         return d[0].slice(-1) + d[1] + d[2] + '.' + t[0] + t[1];
     }
 
+    function timeago(ts) {
+        if (!ts) return '-';
+        var diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+        if (diff < 0) return '0s';
+        var s = diff;
+        var m = Math.floor(s / 60);
+        var h = Math.floor(s / 3600);
+        var d = Math.floor(s / 86400);
+        var M = Math.floor(d / 30);
+        var a = Math.floor(d / 365);
+        if (s < 60) return s + 's';
+        if (m < 60) return m + 'm';
+        if (h < 2) return h + 'h' + (m % 60 ? (m % 60) + 'm' : '');
+        if (h < 24) return h + 'h+';
+        if (d === 1) return '1d';
+        if (d === 2) return '2d+';
+        if (d < 30) return d + 'd+';
+        if (M === 1) return '1M';
+        if (M < 12) return M + 'M+';
+        if (a === 1) return '1a';
+        return a + 'a+';
+    }
+
     function mostrarMensaje(tipo, texto) {
         const el = document.getElementById('mensaje');
         el.style.display = 'block';
@@ -507,7 +530,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<tr>';
             html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
             html += '<td>' + escapeHtml(f.nombre) + '</td>';
-            html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
+            html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + ' (' + timeago(f.fecha_archivo) + ')' + '</td>';
             html += '<td><input type="checkbox" class="arch-check" value="' + f.id + '"' + (isMatch ? ' checked' : '') + '></td>';
             html += '</tr>';
         }
@@ -639,7 +662,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<td style="font-size:0.85rem;color:#666;">' + escapeHtml(f.ruta.replace('/srv/precios/', '')) + '</td>';
             html += '<td>' + escapeHtml(f.nombre) + '</td>';
             html += '<td>' + (f.peso ? escapeHtml(f.peso) : '-') + '</td>';
-            html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
+            html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + ' (' + timeago(f.fecha_archivo) + ')' + '</td>';
             html += '<td>' + escapeHtml(f.status ?? '-') + '</td>';
             html += '<td><button class="secondary outline btn-eliminar" data-id="' + f.id + '" data-nombre="' + escapeHtml(f.nombre) + '" style="padding:0.25rem 0.5rem;font-size:0.85rem;">Eliminar</button></td>';
             html += '</tr>';
@@ -760,8 +783,8 @@ document.addEventListener('DOMContentLoaded', function () {
                         html += '<a href="/dashboard/archivos?tab=asociar&id=' + f.id + '&q=' + encodeURIComponent(f.nombre) + '" style="text-decoration:none;color:#888;" title="Asociar a sucursal">+</a>';
                     }
                     html += '</td>';
-                    html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + '</td>';
-                    html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_carga) + '</td>';
+                    html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + ' (' + timeago(f.fecha_archivo) + ')' + '</td>';
+                    html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_carga) + ' (' + timeago(f.fecha_carga) + ')' + '</td>';
                     html += '<td>' + (f.status === 'ausente' ? '<span style="color:#e65100;font-weight:bold;">Ausente</span>' : escapeHtml(f.status || '-')) + '</td>';
                     html += '<td><input type="checkbox" class="toggle-desblinde" data-id="' + f.id + '"' + (f.is_desblinde ? ' checked' : '') + '></td>';
                     html += '<td><input type="checkbox" class="toggle-enabled" data-id="' + f.id + '"' + (f.enabled ? ' checked' : '') + '></td>';

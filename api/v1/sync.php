@@ -20,7 +20,7 @@ $stmt = $pdo->query("SELECT ruta, nombre FROM archivos WHERE enabled = TRUE ORDE
 $archivos = $stmt->fetchAll();
 
 $baseScripts = realpath(__DIR__ . '/../../scripts');
-$fuenteFile = $baseScripts . '/archivosFuente.txt';
+$fuenteFile = $baseScripts . '/all.ls';
 $getAllScript = $baseScripts . '/getAll.sh';
 
 $lines = [];
@@ -30,7 +30,7 @@ foreach ($archivos as $a) {
 }
 file_put_contents($fuenteFile, implode("\n", $lines) . "\n");
 $output = [];
-exec("sudo " . escapeshellarg($getAllScript) . " 2>&1", $output, $exitCode);
+exec("sudo " . escapeshellarg($getAllScript) . " " . escapeshellarg('all.ls') . " 2>&1", $output, $exitCode);
 
 $outputText = implode("\n", $output);
 

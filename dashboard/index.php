@@ -10,6 +10,29 @@ function fmtFecha($ts) {
     return substr(date('Y', $t), -1) . date('md.Hi', $t);
 }
 
+function timeago($ts) {
+    if (!$ts) return '-';
+    $diff = time() - strtotime($ts);
+    if ($diff < 0) return '0s';
+    $s = $diff;
+    $m = intdiv($s, 60);
+    $h = intdiv($s, 3600);
+    $d = intdiv($s, 86400);
+    $M = intdiv($d, 30);
+    $a = intdiv($d, 365);
+    if ($s < 60) return $s . 's';
+    if ($m < 60) return $m . 'm';
+    if ($h < 2) return $h . 'h' . ($m % 60 ? ($m % 60) . 'm' : '');
+    if ($h < 24) return $h . 'h+';
+    if ($d === 1) return '1d';
+    if ($d === 2) return '2d+';
+    if ($d < 30) return $d . 'd+';
+    if ($M === 1) return '1M';
+    if ($M < 12) return $M . 'M+';
+    if ($a === 1) return '1a';
+    return $a . 'a+';
+}
+
 $totalArchivos = $pdo->query("SELECT COUNT(*) FROM archivos")->fetchColumn();
 $totalSucursales = $pdo->query("SELECT COUNT(*) FROM sucursales WHERE enabled = TRUE")->fetchColumn();
 $comprimidos = $pdo->query("SELECT COUNT(*) FROM archivos WHERE comprimido = TRUE")->fetchColumn();
@@ -72,8 +95,8 @@ require __DIR__ . '/header.php';
                         <tr>
                             <td><?= htmlspecialchars($f['nombre']) ?></td>
                             <td><code><?= htmlspecialchars($f['ruta']) ?></code></td>
-                            <td style="font-size:0.85rem;"><?= fmtFecha($f['fecha_archivo']) ?></td>
-                            <td><?= fmtFecha($f['fecha_carga']) ?></td>
+                            <td style="font-size:0.85rem;"><?= fmtFecha($f['fecha_archivo']) ?> (<?= timeago($f['fecha_archivo']) ?>)</td>
+                            <td><?= fmtFecha($f['fecha_carga']) ?> (<?= timeago($f['fecha_carga']) ?>)</td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

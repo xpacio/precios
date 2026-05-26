@@ -2,6 +2,8 @@
 
 $pageTitle = 'Editar Archivo';
 
+require_once __DIR__ . '/../lib/sync_helper.php';
+
 $pdo = getDB();
 $mensaje = '';
 $error = '';
@@ -10,6 +12,29 @@ function fmtFecha($ts) {
     if (!$ts) return '-';
     $t = strtotime($ts);
     return substr(date('Y', $t), -1) . date('md.Hi', $t);
+}
+
+function timeago($ts) {
+    if (!$ts) return '-';
+    $diff = time() - strtotime($ts);
+    if ($diff < 0) return '0s';
+    $s = $diff;
+    $m = intdiv($s, 60);
+    $h = intdiv($s, 3600);
+    $d = intdiv($s, 86400);
+    $M = intdiv($d, 30);
+    $a = intdiv($d, 365);
+    if ($s < 60) return $s . 's';
+    if ($m < 60) return $m . 'm';
+    if ($h < 2) return $h . 'h' . ($m % 60 ? ($m % 60) . 'm' : '');
+    if ($h < 24) return $h . 'h+';
+    if ($d === 1) return '1d';
+    if ($d === 2) return '2d+';
+    if ($d < 30) return $d . 'd+';
+    if ($M === 1) return '1M';
+    if ($M < 12) return $M . 'M+';
+    if ($a === 1) return '1a';
+    return $a . 'a+';
 }
 
 $id = (int)($segments[2] ?? $_GET['id'] ?? 0);
@@ -55,6 +80,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggl
     } catch (Exception $e) {
         echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
     }
+    exit;
+}
+
+// === POST: sync-one (AJAX) ===
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'sync-one') {
+    header('Content-Type: application/json');
+    $relPath = $arch['ruta'] . '/' . $arch['nombre'];
+    $getOneScript = realpath(__DIR__ . '/../scripts/getOne.sh');
+    $cmd = "sudo " . escapeshellarg($getOneScript) . " --fast " . escapeshellarg($relPath) . " 2>&1";
+    exec($cmd, $output, $exitCode);
+    if ($exitCode !== 0) {
+        echo json_encode(['ok' => false, 'mensaje' => 'Error al sincronizar: ' . implode("\n", $output)]);
+        exit;
+    }
+    $result = processAndCompressFile($arch['ruta'], $arch['nombre']);
+    $msg = $result['status'] === 'OK' ? 'Sincronizado y comprimido' : 'Sincronizado (' . $result['mensaje'] . ')';
+    echo json_encode(['ok' => true, 'mensaje' => $msg]);
     exit;
 }
 
@@ -120,10 +162,11 @@ require __DIR__ . '/header.php';
     <header>
         <strong>Editar Archivo #<?= $arch['id'] ?></strong>
         <span style="font-size:0.85rem;color:#888;margin-left:1rem;">
-            Modificado: <?= fmtFecha($arch['fecha_archivo']) ?> &middot; Carga: <?= fmtFecha($arch['fecha_carga']) ?>
+            Modificado: <?= fmtFecha($arch['fecha_archivo']) ?> (<?= timeago($arch['fecha_archivo']) ?>) &middot; Carga: <?= fmtFecha($arch['fecha_carga']) ?> (<?= timeago($arch['fecha_carga']) ?>)
         </span>
-        <span style="margin-left:1rem;">
-            <a href="/dashboard/archivos?tab=asociar&id=<?= $id ?>&q=<?= urlencode($arch['nombre']) ?>" style="text-decoration:none;font-size:1.2rem;color:#888;" title="Asociar a sucursal">+</a>
+        <span style="margin-left:1rem;display:inline-flex;align-items:center;gap:0.5rem;">
+            <a href="/dashboard/archivos?tab=asociar&id=<?= $id ?>&q=<?= urlencode($arch['nombre']) ?>" role="button" class="primary" style="padding:0.15rem 0.5rem;font-size:0.8rem;text-decoration:none;" title="Asociar a sucursal">asociar</a>
+            <button id="btnSyncOne" class="primary" style="padding:0.15rem 0.5rem;font-size:0.8rem;cursor:pointer;" title="Sincronizar archivo desde origen">Sync</button>
         </span>
     </header>
     <form method="POST" action="/dashboard/archivo-editar?id=<?= $id ?>">
@@ -204,6 +247,30 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     document.querySelectorAll('.toggle-enabled').forEach(function (cb) {
         cb.addEventListener('change', function () { toggleField('toggle-enabled', this); });
+    });
+
+    document.getElementById('btnSyncOne').addEventListener('click', function () {
+        var btn = this;
+        btn.setAttribute('aria-busy', 'true');
+        btn.disabled = true;
+        var formData = new FormData();
+        formData.append('action', 'sync-one');
+        fetch('/dashboard/archivo-editar?id=<?= $id ?>', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                btn.removeAttribute('aria-busy');
+                btn.disabled = false;
+                var flash = document.createElement('div');
+                flash.className = data.ok ? 'flash flash-success' : 'flash flash-error';
+                flash.textContent = data.mensaje || (data.ok ? 'OK' : 'Error');
+                var article = document.querySelector('article');
+                article.parentNode.insertBefore(flash, article);
+                setTimeout(function () { flash.remove(); }, 5000);
+            })
+            .catch(function () {
+                btn.removeAttribute('aria-busy');
+                btn.disabled = false;
+            });
     });
 });
 </script>
