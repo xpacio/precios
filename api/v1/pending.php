@@ -20,7 +20,7 @@ try {
     $pdo = getDB();
 
     $stmt = $pdo->prepare("
-        SELECT a.id, a.nombre, a.flat, a.br, a.peso, a.updated_at AS ultimo_cambio
+        SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.peso, a.updated_at AS ultimo_cambio
         FROM archivo_sucursal asu
         JOIN archivos a ON a.id = asu.archivo_id
         WHERE asu.sucursal_id = ? AND asu.enabled = TRUE AND asu.sync = FALSE AND a.status = 'ready'
@@ -32,9 +32,10 @@ try {
     $result = array_map(function ($f) {
         return [
             'id' => $f['id'],
+            'ruta' => $f['ruta'],
             'nombre' => $f['nombre'],
-            'flat' => $f['flat'],
-            'br' => $f['br'],
+            'flat' => trim($f['flat']),
+            'br' => trim($f['br']),
             'peso' => (int)$f['peso'],
             'ultimo_cambio' => $f['ultimo_cambio'],
         ];
