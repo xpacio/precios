@@ -250,7 +250,9 @@ fn fetchPending(client: *std.http.Client, allocator: Allocator, config: *const C
     };
     defer tree.deinit();
 
-    const arr = tree.value.array;
+    const root = tree.value.object;
+    const archivos = root.get("archivos") orelse return error.MissingArchivos;
+    const arr = archivos.array;
     var files = try allocator.alloc(PendingFile, arr.items.len);
     for (arr.items, 0..) |item, i| {
         const nombre = try allocator.dupe(u8, item.object.get("nombre").?.string);
