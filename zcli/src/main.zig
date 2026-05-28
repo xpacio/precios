@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 
 const has_brotli = builtin.os.tag != .windows;
+const is_windows = builtin.os.tag == .windows;
 
 const cc = std.builtin.CallingConvention.c;
 
@@ -61,7 +62,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
     return switch (mode) {
         .sync => runSync(&client, allocator, &config),
-        .interactive => runInteractive(&client, allocator, &config),
+        .interactive => if (is_windows) (try runSync(&client, allocator, &config)) else runInteractive(&client, allocator, &config),
     };
 }
 
@@ -135,14 +136,14 @@ fn fetchPending(client: *std.http.Client, allocator: Allocator, config: *const C
 
     const auth = httpHeader("X-API-Key", config.api_key);
     const headers = [_]std.http.Header{auth};
-    var buf: [4096]u8 = undefined;
+    var redirect_buf: [4096]u8 = undefined;
     var response_buf: [65536]u8 = undefined;
     var fw = std.Io.Writer.fixed(&response_buf);
 
     const result = try client.fetch(.{
         .location = .{ .url = url },
         .extra_headers = &headers,
-        .redirect_buffer = &buf,
+        .redirect_buffer = &redirect_buf,
         .response_writer = &fw,
     });
     if (result.status.class() != .success) return error.HttpError;
@@ -166,14 +167,14 @@ fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const C
 
     const auth = httpHeader("X-API-Key", config.api_key);
     const headers = [_]std.http.Header{auth};
-    var buf: [4096]u8 = undefined;
+    var redirect_buf: [4096]u8 = undefined;
     var response_buf: [5242880]u8 = undefined;
     var fw = std.Io.Writer.fixed(&response_buf);
 
     const result = try client.fetch(.{
         .location = .{ .url = url },
         .extra_headers = &headers,
-        .redirect_buffer = &buf,
+        .redirect_buffer = &redirect_buf,
         .response_writer = &fw,
     });
     if (result.status.class() != .success) return error.HttpError;
@@ -189,8 +190,9 @@ fn confirmDownload(client: *std.http.Client, allocator: Allocator, config: *cons
     defer allocator.free(body);
 
     const auth = httpHeader("X-API-Key", config.api_key);
-    const headers = [_]std.http.Header{httpHeader("Content-Type", "application/json"), auth};
-    var buf: [4096]u8 = undefined;
+    const content_type = httpHeader("Content-Type", "application/json");
+    const headers = [_]std.http.Header{ content_type, auth };
+    var redirect_buf: [4096]u8 = undefined;
     var resp_buf: [1024]u8 = undefined;
     var fw = std.Io.Writer.fixed(&resp_buf);
 
@@ -199,7 +201,7 @@ fn confirmDownload(client: *std.http.Client, allocator: Allocator, config: *cons
         .method = .POST,
         .payload = body,
         .extra_headers = &headers,
-        .redirect_buffer = &buf,
+        .redirect_buffer = &redirect_buf,
         .response_writer = &fw,
     });
     if (result.status.class() != .success) return error.HttpError;
@@ -221,7 +223,7 @@ fn decompressBrotli(input: []const u8, allocator: Allocator) ![]u8 {
     const d = extern_fns.BrotliDecoderCreateInstance(null, null, null) orelse return error.BrotliInit;
     defer extern_fns.BrotliDecoderDestroyInstance(d);
 
-    var list = std.ArrayList.Managed(u8).init(allocator);
+    var list = std.array_list.Managed(u8).init(allocator);
     defer list.deinit();
 
     var avail_in: usize = input.len;
@@ -316,9 +318,9 @@ fn runInteractive(client: *std.http.Client, allocator: Allocator, config: *const
     var c_line: [64]u8 = undefined;
     while (true) {
         std.debug.print("Opcion [1-{d}, a=all, q=quit]: ", .{files.len});
-        const r = extern_fns.fgets(&c_line, @intCast(c_line.len), extern_fns.stdin());
+        const r = extern_fns.fgets(@as([*:0]u8, @ptrCast(&c_line)), @intCast(c_line.len), extern_fns.stdin());
         if (r == null) return 0;
-        const line = std.mem.trimRight(u8, std.mem.sliceTo(&c_line, 0), "\n\r ");
+        const line = std.mem.trim(u8, std.mem.sliceTo(r.?, 0), " \n\r");
         if (line.len == 0) continue;
 
         if (std.mem.eql(u8, line, "q")) break;
@@ -327,9 +329,9 @@ fn runInteractive(client: *std.http.Client, allocator: Allocator, config: *const
                 std.debug.print("Procesando {s}... ", .{file.nombre});
                 processFile(client, allocator, config, file.nombre) catch |err| {
                     std.debug.print("ERROR: {s}\n", .{@errorName(err)});
-                    std.debug.print("OK\n", .{});
                 };
             }
+            std.debug.print("OK\n", .{});
             continue;
         }
 
@@ -360,5 +362,4 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
     }
 
     try confirmDownload(client, allocator, config, nombre, "ok");
-    std.debug.print("OK\n", .{});
 }

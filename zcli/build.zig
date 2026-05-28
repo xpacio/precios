@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
 
     inline for (.{
         .{ .name = "zcli", .target = b.resolveTargetQuery(.{}) },
-        .{ .name = "zcli.exe", .target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .windows, .os_version_min = .{ .windows = .win10 } }) },
+        .{ .name = "zcli", .target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .windows, .os_version_min = .{ .windows = .win10 } }) },
     }) |cfg| {
         const mod = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
