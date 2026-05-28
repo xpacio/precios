@@ -57,15 +57,22 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
     const args_slice = try std.process.Args.toSlice(init.args, allocator);
     defer allocator.free(args_slice);
+    debug("zcli iniciado, args={any}", .{args_slice});
 
+    debug("Inicializando Io.Threaded...", .{});
     var threaded = std.Io.Threaded.init(allocator, .{ .environ = init.environ });
     defer threaded.deinit();
     const io = threaded.io();
+    debug("Io.Threaded OK", .{});
 
+    debug("Inicializando HTTP client...", .{});
     var client = std.http.Client{ .allocator = allocator, .io = io };
     defer client.deinit();
+    debug("HTTP client OK", .{});
 
+    debug("Leyendo config...", .{});
     const config: Config = readConfig() catch cfg: {
+        debug("readConfig: no encontrado, iniciando setup interactivo", .{});
         break :cfg try setupConfig(allocator);
     };
     defer {
@@ -73,11 +80,14 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
         allocator.free(config.api_key);
         allocator.free(config.sucursal_id);
     }
+    debug("Config OK: url={s}, key={s}, sid={s}", .{ config.api_base_url, config.api_key, config.sucursal_id });
 
+    debug("Iniciando sync batch...", .{});
     const result = runSync(&client, allocator, &config) catch |err| {
         debug("Sync failed: {s}", .{@errorName(err)});
         return 1;
     };
+    debug("Exit code: {}", .{result});
     return result;
 }
 
@@ -104,19 +114,31 @@ const config_paths = [_][:0]const u8{
 fn readConfig() !Config {
     const allocator = std.heap.c_allocator;
     for (config_paths) |path| {
-        const content = readFile(path) catch continue;
+        debug("readConfig: intentando {s}", .{path});
+        const content = readFile(path) catch {
+            debug("readConfig: {s} no encontrado", .{path});
+            continue;
+        };
         defer allocator.free(content);
+        debug("readConfig: {s} leido ({d} bytes)", .{ path, content.len });
 
-        var tree = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch continue;
+        var tree = std.json.parseFromSlice(std.json.Value, allocator, content, .{}) catch {
+            debug("readConfig: {s} JSON invalido", .{path});
+            continue;
+        };
         defer tree.deinit();
+        debug("readConfig: {s} JSON parseado OK", .{path});
 
         const root = tree.value.object;
-        return Config{
+        const cfg = Config{
             .api_base_url = try allocator.dupe(u8, if (root.get("ApiBaseUrl")) |v| v.string else "http://precios.servicios.care"),
             .api_key = try allocator.dupe(u8, if (root.get("ApiKey")) |v| v.string else "precios_api_key_2024"),
             .sucursal_id = try allocator.dupe(u8, if (root.get("SucursalId")) |v| v.string else ""),
         };
+        debug("readConfig: OK desde {s}", .{path});
+        return cfg;
     }
+    debug("readConfig: todos los paths fallaron", .{});
     return error.ConfigNotFound;
 }
 
@@ -138,12 +160,14 @@ fn readFile(path: [:0]const u8) ![]u8 {
 }
 
 fn writeFile(path: []const u8, data: []const u8) !void {
+    debug("writeFile: {s} ({d} bytes)", .{ path, data.len });
     const path_z = try std.heap.c_allocator.dupeZ(u8, path);
     defer std.heap.c_allocator.free(path_z);
     const f = extern_fns.fopen(path_z, "wb") orelse return error.FileOpenFailed;
     defer _ = extern_fns.fclose(f);
     const written = extern_fns.fwrite(data.ptr, 1, data.len, f);
     if (written != data.len) return error.WriteFailed;
+    debug("writeFile: {s} escrito OK", .{path});
 }
 
 fn readLine(buf: []u8) ![]const u8 {
@@ -186,10 +210,12 @@ fn setupConfig(allocator: Allocator) !Config {
     const json = try std.fmt.allocPrint(allocator, "{{\n  \"ApiBaseUrl\": \"{s}\",\n  \"ApiKey\": \"{s}\",\n  \"SucursalId\": \"{s}\"\n}}\n", .{ api_base_url, api_key, sucursal_id });
     defer allocator.free(json);
 
-    writeFile("appsettings.json", json) catch {
+    writeFile("appsettings.json", json) catch |err| {
+        debug("Error escribiendo appsettings.json: {s}", .{@errorName(err)});
         return error.ConfigSetupFailed;
     };
 
+    debug("appsettings.json creado.", .{});
     return Config{ .api_base_url = api_base_url, .api_key = api_key, .sucursal_id = sucursal_id };
 }
 
@@ -207,20 +233,25 @@ fn fetchPending(client: *std.http.Client, allocator: Allocator, config: *const C
     var response_buf: [65536]u8 = undefined;
     var fw = std.Io.Writer.fixed(&response_buf);
 
+    debug("fetchPending: GET {s}", .{url});
     const result = client.fetch(.{
         .location = .{ .url = url },
         .extra_headers = &headers,
         .redirect_buffer = &redirect_buf,
         .response_writer = &fw,
     }) catch |err| {
+        debug("fetchPending: ERROR {s}", .{@errorName(err)});
         return err;
     };
+    debug("fetchPending: status={s} ({d} bytes)", .{ @tagName(result.status.class()), fw.end });
 
     if (result.status.class() != .success) return error.HttpError;
 
     const body = response_buf[0..fw.end];
+    debug("fetchPending: body={s}", .{body});
 
     var tree = std.json.parseFromSlice(std.json.Value, allocator, body, .{}) catch |err| {
+        debug("fetchPending: JSON parse ERROR {s}", .{@errorName(err)});
         return err;
     };
     defer tree.deinit();
@@ -242,6 +273,7 @@ fn fetchPending(client: *std.http.Client, allocator: Allocator, config: *const C
             .peso = peso, .ultimo_cambio = uc,
         };
     }
+    debug("fetchPending: {d} archivos pendientes", .{files.len});
     return files;
 }
 
@@ -255,17 +287,21 @@ fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const C
     var response_buf: [5242880]u8 = undefined;
     var fw = std.Io.Writer.fixed(&response_buf);
 
+    debug("  downloadFile: GET {s}", .{url});
     const result = client.fetch(.{
         .location = .{ .url = url },
         .extra_headers = &headers,
         .redirect_buffer = &redirect_buf,
         .response_writer = &fw,
     }) catch |err| {
+        debug("  downloadFile: ERROR {s}", .{@errorName(err)});
         return err;
     };
     if (result.status.class() != .success) return error.HttpError;
 
-    return try allocator.dupe(u8, response_buf[0..fw.end]);
+    const data = try allocator.dupe(u8, response_buf[0..fw.end]);
+    debug("  downloadFile: OK ({d} bytes)", .{data.len});
+    return data;
 }
 
 fn confirmDownload(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, result_type: []const u8) !void {
@@ -282,6 +318,7 @@ fn confirmDownload(client: *std.http.Client, allocator: Allocator, config: *cons
     var resp_buf: [1024]u8 = undefined;
     var fw = std.Io.Writer.fixed(&resp_buf);
 
+    debug("  confirmDownload: POST {s} body={s}", .{ url, body });
     const result = client.fetch(.{
         .location = .{ .url = url },
         .method = .POST,
@@ -290,9 +327,14 @@ fn confirmDownload(client: *std.http.Client, allocator: Allocator, config: *cons
         .redirect_buffer = &redirect_buf,
         .response_writer = &fw,
     }) catch |err| {
+        debug("  confirmDownload: ERROR {s}", .{@errorName(err)});
         return err;
     };
-    if (result.status.class() != .success) return error.HttpError;
+    if (result.status.class() != .success) {
+        debug("  confirmDownload: status={s}", .{@tagName(result.status.class())});
+        return error.HttpError;
+    }
+    debug("  confirmDownload: OK", .{});
 }
 
 fn formatFullHash(data: []const u8) [9]u8 {
@@ -379,6 +421,7 @@ fn computeXxh3Hex(data: []const u8) [6]u8 {
 fn decompressBrotli(input: []const u8, allocator: Allocator) ![]u8 {
     if (!has_brotli) return error.BrotliNotAvailable;
 
+    debug("  decompressBrotli: iniciando ({d} bytes)", .{input.len});
     const d = extern_fns.BrotliDecoderCreateInstance(null, null, null) orelse return error.BrotliInit;
     defer extern_fns.BrotliDecoderDestroyInstance(d);
 
@@ -398,10 +441,16 @@ fn decompressBrotli(input: []const u8, allocator: Allocator) ![]u8 {
         if (rc == BR_NEED and avail_in == 0) return error.UnexpectedEnd;
         if (rc != BR_NEED) return error.BrotliError;
     }
-    return try list.toOwnedSlice();
+    const result = try list.toOwnedSlice();
+    debug("  decompressBrotli: OK ({d} -> {d} bytes, {d:0.1}%)", .{ input.len, result.len, @as(f64, @floatFromInt(result.len)) / @as(f64, @floatFromInt(input.len)) * 100 });
+    return result;
 }
 
 fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config) !u8 {
+    debug("=== Sync iniciado - Sucursal: {s} ===", .{config.sucursal_id});
+
+    const t0 = extern_fns.time(null);
+
     const files = fetchPending(client, allocator, config) catch |err| {
         debug("Error fetching pending: {s}", .{@errorName(err)});
         return 1;
@@ -417,15 +466,23 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
         allocator.free(files);
     }
 
+    debug("Archivos pendientes: {d}", .{files.len});
+
     if (files.len == 0) {
         debug("No hay archivos pendientes", .{});
         return 0;
     }
 
+    var summary_lines = std.array_list.Managed([]u8).init(allocator);
+    defer {
+        for (summary_lines.items) |s| allocator.free(s);
+        summary_lines.deinit();
+    }
+
     var ok_count: u32 = 0;
     var fail_count: u32 = 0;
 
-    for (files) |file| {
+    for (files, 1..) |file, i| {
         const is_br = std.mem.endsWith(u8, file.nombre, ".br");
         const output_name = if (is_br) file.nombre[0 .. file.nombre.len - 3] else file.nombre;
 
@@ -433,6 +490,8 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             try std.fmt.allocPrint(allocator, "{s}/{s}", .{ file.ruta, output_name })
         else
             try allocator.dupe(u8, output_name);
+
+        debugInline("[{d}/{d}] {s} ... ", .{ i, files.len, origin_path });
 
         var status: u8 = '+';
 
@@ -454,7 +513,9 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
         }
 
         const data = downloadFile(client, allocator, config, file.nombre) catch |err| {
-            debug("[{c}] {s} ERROR download: {s}", .{ status, origin_path, @errorName(err) });
+            debug("ERROR download: {s}", .{@errorName(err)});
+            const err_line = try std.fmt.allocPrint(allocator, "[{c}] {s} ERROR download: {s}", .{ status, origin_path, @errorName(err) });
+            try summary_lines.append(err_line);
             allocator.free(origin_path);
             fail_count += 1;
             continue;
@@ -464,7 +525,9 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
 
         if (is_br) {
             const decompressed = decompressBrotli(data, allocator) catch |err| {
-                debug("[{c}] {s} ERROR decompress: {s}", .{ status, origin_path, @errorName(err) });
+                debug("ERROR decompress: {s}", .{@errorName(err)});
+                const err_line = try std.fmt.allocPrint(allocator, "[{c}] {s} ERROR decompress: {s}", .{ status, origin_path, @errorName(err) });
+                try summary_lines.append(err_line);
                 allocator.free(origin_path);
                 allocator.free(data);
                 fail_count += 1;
@@ -481,7 +544,9 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             }
 
             writeFile(output_name, decompressed) catch |err| {
-                debug("[{c}] {s} ERROR write: {s}", .{ status, origin_path, @errorName(err) });
+                debug("ERROR write: {s}", .{@errorName(err)});
+                const err_line = try std.fmt.allocPrint(allocator, "[{c}] {s} ERROR write: {s}", .{ status, origin_path, @errorName(err) });
+                try summary_lines.append(err_line);
                 allocator.free(origin_path);
                 allocator.free(data);
                 allocator.free(decompressed);
@@ -490,12 +555,14 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             };
 
             const age = computeAge(file.ultimo_cambio);
-            debug("[{c}] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
+            const line = try std.fmt.allocPrint(allocator, "[{c}] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
                 status, origin_path,
                 file.flat, file.br,
                 dbf_full, age,
                 br_full, age,
             });
+            try summary_lines.append(line);
+            debug("{s}", .{line});
 
             allocator.free(decompressed);
         } else {
@@ -509,7 +576,9 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             }
 
             writeFile(output_name, data) catch |err| {
-                debug("[{c}] {s} ERROR write: {s}", .{ status, origin_path, @errorName(err) });
+                debug("ERROR write: {s}", .{@errorName(err)});
+                const err_line = try std.fmt.allocPrint(allocator, "[{c}] {s} ERROR write: {s}", .{ status, origin_path, @errorName(err) });
+                try summary_lines.append(err_line);
                 allocator.free(origin_path);
                 allocator.free(data);
                 fail_count += 1;
@@ -517,22 +586,37 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             };
 
             const age = computeAge(file.ultimo_cambio);
-            debug("[{c}] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
+            const line = try std.fmt.allocPrint(allocator, "[{c}] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
                 status, origin_path,
                 file.flat, file.br,
                 dbf_full, age,
                 br_full, age,
             });
+            try summary_lines.append(line);
+            debug("{s}", .{line});
         }
 
-        confirmDownload(client, allocator, config, file.nombre, "ok") catch {};
+        confirmDownload(client, allocator, config, file.nombre, "ok") catch {
+            debug("  confirmDownload: WARNING fallo confirmacion", .{});
+        };
 
         allocator.free(origin_path);
         allocator.free(data);
         ok_count += 1;
     }
 
-    debug("=== Sync completado: {} OK, {} fallos ===", .{ ok_count, fail_count });
+    const elapsed = extern_fns.time(null) - t0;
+    const elapsed_m = @divTrunc(elapsed, 60);
+    const elapsed_s = @mod(elapsed, 60);
+
+    debug("", .{});
+    debug("=== Resumen ===", .{});
+    for (summary_lines.items) |line| {
+        debug("{s}", .{line});
+    }
+    debug("", .{});
+    debug("{} OK, {} fallos en {d}m {d}s", .{ ok_count, fail_count, elapsed_m, elapsed_s });
+
     if (fail_count > 0) return 1;
     return 0;
 }
