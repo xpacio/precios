@@ -45,10 +45,9 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
     var client = std.http.Client{ .allocator = allocator, .io = io };
     defer client.deinit();
 
-    const config = readConfig() catch |err| {
-        std.debug.print("Error: appsettings.json: {s}\n", .{@errorName(err)});
-        return 1;
-    };
+    const config: Config = readConfig() catch
+        (try setupConfig(allocator))
+    ;
     defer {
         allocator.free(config.api_base_url);
         allocator.free(config.api_key);
@@ -122,6 +121,55 @@ fn writeFile(path: []const u8, data: []const u8) !void {
     defer _ = extern_fns.fclose(f);
     const written = extern_fns.fwrite(data.ptr, 1, data.len, f);
     if (written != data.len) return error.WriteFailed;
+}
+
+fn readLine(buf: []u8) ![]const u8 {
+    const r = extern_fns.fgets(@as([*:0]u8, @ptrCast(buf.ptr)), @intCast(buf.len), extern_fns.__acrt_iob_func(0));
+    if (r == null) return error.Eof;
+    return std.mem.trim(u8, std.mem.sliceTo(r.?, 0), " \n\r");
+}
+
+fn setupConfig(allocator: Allocator) !Config {
+    std.debug.print("appsettings.json no encontrado.\n", .{});
+
+    std.debug.print("Codigo de sucursal: ", .{});
+    var sid_buf: [64]u8 = undefined;
+    const sid_line = try readLine(&sid_buf);
+    if (sid_line.len == 0) return error.SucursalRequired;
+    const sucursal_id = try allocator.dupe(u8, sid_line);
+
+    std.debug.print("Desea configurar valores personalizados? (s/N): ", .{});
+    var yn_buf: [8]u8 = undefined;
+    const yn_line = readLine(&yn_buf) catch "";
+    const custom = yn_line.len > 0 and (yn_line[0] == 's' or yn_line[0] == 'S');
+
+    const def_url = "http://precios.servicios.care";
+    const def_key = "precios_api_key_2024";
+
+    const api_base_url = if (custom) blk: {
+        std.debug.print("ApiBaseUrl [{s}]: ", .{def_url});
+        var url_buf: [256]u8 = undefined;
+        const url_line = readLine(&url_buf) catch def_url;
+        break :blk try allocator.dupe(u8, if (url_line.len > 0) url_line else def_url);
+    } else try allocator.dupe(u8, def_url);
+
+    const api_key = if (custom) blk: {
+        std.debug.print("ApiKey [{s}]: ", .{def_key});
+        var key_buf: [256]u8 = undefined;
+        const key_line = readLine(&key_buf) catch def_key;
+        break :blk try allocator.dupe(u8, if (key_line.len > 0) key_line else def_key);
+    } else try allocator.dupe(u8, def_key);
+
+    const json = try std.fmt.allocPrint(allocator, "{{\n  \"ApiBaseUrl\": \"{s}\",\n  \"ApiKey\": \"{s}\",\n  \"SucursalId\": \"{s}\"\n}}\n", .{ api_base_url, api_key, sucursal_id });
+    defer allocator.free(json);
+
+    writeFile("appsettings.json", json) catch |err| {
+        std.debug.print("Error escribiendo appsettings.json: {s}\n", .{@errorName(err)});
+        return error.ConfigSetupFailed;
+    };
+
+    std.debug.print("appsettings.json creado.\n", .{});
+    return Config{ .api_base_url = api_base_url, .api_key = api_key, .sucursal_id = sucursal_id };
 }
 
 fn httpHeader(name: []const u8, value: []const u8) std.http.Header {
