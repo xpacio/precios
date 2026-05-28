@@ -3,24 +3,38 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const optimize = .ReleaseSmall;
 
-    inline for (.{
-        .{ .name = "zcli", .target = b.resolveTargetQuery(.{}) },
-        .{ .name = "zcli", .target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .windows, .os_version_min = .{ .windows = .win10 } }) },
-    }) |cfg| {
-        const mod = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = cfg.target,
-            .optimize = optimize,
-            .strip = true,
-        });
-        mod.link_libc = true;
+    const target = b.resolveTargetQuery(.{
+        .cpu_arch = .x86_64,
+        .os_tag = .windows,
+        .os_version_min = .{ .windows = .win10 },
+    });
 
-        if (cfg.target.result.os.tag != .windows) {
-            mod.linkSystemLibrary("brotlidec", .{ .preferred_link_mode = .static });
-            mod.linkSystemLibrary("brotlicommon", .{ .preferred_link_mode = .static });
-        }
+    const brotli_c = [_][]const u8{
+        "brotli/c/dec/decode.c",
+        "brotli/c/dec/bit_reader.c",
+        "brotli/c/dec/huffman.c",
+        "brotli/c/dec/state.c",
+        "brotli/c/common/constants.c",
+        "brotli/c/common/dictionary.c",
+        "brotli/c/common/platform.c",
+        "brotli/c/common/context.c",
+        "brotli/c/common/shared_dictionary.c",
+        "brotli/c/common/transform.c",
+    };
 
-        const exe = b.addExecutable(.{ .name = cfg.name, .root_module = mod });
-        b.installArtifact(exe);
+    const mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .strip = true,
+    });
+    mod.link_libc = true;
+    mod.addIncludePath(b.path("brotli/c/include"));
+
+    for (&brotli_c) |cfile| {
+        mod.addCSourceFile(.{ .file = b.path(cfile), .flags = &.{"-Os"} });
     }
+
+    const exe = b.addExecutable(.{ .name = "zcli", .root_module = mod });
+    b.installArtifact(exe);
 }

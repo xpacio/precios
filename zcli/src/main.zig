@@ -1,10 +1,8 @@
 const std = @import("std");
-const builtin = @import("builtin");
 
 const Allocator = std.mem.Allocator;
 
-const has_brotli = builtin.os.tag != .windows;
-const is_windows = builtin.os.tag == .windows;
+const has_brotli = true;
 
 const cc = std.builtin.CallingConvention.c;
 
@@ -29,7 +27,7 @@ const extern_fns = struct {
     extern fn rename(old: [*:0]const u8, new: [*:0]const u8) callconv(cc) c_int;
     extern fn remove(path: [*:0]const u8) callconv(cc) c_int;
     extern fn fgets(buf: [*:0]u8, size: c_int, stream: *anyopaque) callconv(cc) ?[*:0]u8;
-    extern fn stdin() callconv(cc) *anyopaque;
+    extern fn __acrt_iob_func(n: c_uint) callconv(cc) *anyopaque;
 };
 
 const BR_OK: c_int = 1;
@@ -62,7 +60,7 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
     return switch (mode) {
         .sync => runSync(&client, allocator, &config),
-        .interactive => if (is_windows) (try runSync(&client, allocator, &config)) else runInteractive(&client, allocator, &config),
+        .interactive => runInteractive(&client, allocator, &config),
     };
 }
 
@@ -318,7 +316,7 @@ fn runInteractive(client: *std.http.Client, allocator: Allocator, config: *const
     var c_line: [64]u8 = undefined;
     while (true) {
         std.debug.print("Opcion [1-{d}, a=all, q=quit]: ", .{files.len});
-        const r = extern_fns.fgets(@as([*:0]u8, @ptrCast(&c_line)), @intCast(c_line.len), extern_fns.stdin());
+        const r = extern_fns.fgets(@as([*:0]u8, @ptrCast(&c_line)), @intCast(c_line.len), extern_fns.__acrt_iob_func(0));
         if (r == null) return 0;
         const line = std.mem.trim(u8, std.mem.sliceTo(r.?, 0), " \n\r");
         if (line.len == 0) continue;
