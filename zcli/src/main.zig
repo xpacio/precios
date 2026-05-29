@@ -509,7 +509,7 @@ fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: 
     while (i < max_retries) : (i += 1) {
         const data = downloadFile(client, allocator, config, nombre) catch |err| {
             if (i + 1 < max_retries) {
-                debug("  [!] {s} — Error download (intento {}/{}), re-descargando...", .{ nombre, i + 1, max_retries });
+                debug("  [!] {s} | Error download (intento {}/{}), re-descargando...", .{ nombre, i + 1, max_retries });
                 continue;
             }
             return err;
@@ -519,10 +519,10 @@ fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: 
             if (!std.mem.eql(u8, &hash, file_br)) {
                 allocator.free(data);
                 if (i + 1 < max_retries) {
-                    debug("  [!] {s} — Hash br no coincide (intento {}/{}), re-descargando...", .{ nombre, i + 1, max_retries });
+                    debug("  [!] {s} | Hash br no coincide (intento {}/{}), re-descargando...", .{ nombre, i + 1, max_retries });
                     continue;
                 }
-                debug("  [!] {s} — Hash br no coincide tras {} intentos", .{ nombre, max_retries });
+                debug("  [!] {s} | Hash br no coincide tras {} intentos", .{ nombre, max_retries });
                 return error.BrHashMismatch;
             }
         }
@@ -532,8 +532,10 @@ fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: 
 }
 
 fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Config, file: *const PendingFile, summary_lines: *std.array_list.Managed([]u8)) !void {
-    const is_br = std.mem.endsWith(u8, file.nombre, ".br");
-    const output_name = if (is_br) file.nombre[0 .. file.nombre.len - 3] else file.nombre;
+    const output_name = if (std.mem.endsWith(u8, file.nombre, ".br"))
+        file.nombre[0 .. file.nombre.len - 3]
+    else
+        file.nombre;
 
     const origin_path = if (file.ruta.len > 0)
         try std.fmt.allocPrint(allocator, "{s}/{s}", .{ file.ruta, output_name })
@@ -553,8 +555,11 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         const local_hash = computeShortHash(ld);
         if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
             try confirmDownload(client, allocator, config, file.nombre, "skip");
+            const bh = formatFullHash(ld);
             const age = computeAge(file.fecha_archivo);
-            const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} ({s}) - skip", .{ origin_path, file.flat, file.br, age });
+            const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
+                origin_path, file.flat, file.br, bh, age, bh, age,
+            });
             try summary_lines.append(line);
             debug("{s}", .{line});
             return;
@@ -562,33 +567,31 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
     }
 
     const data = tryDownloadWithRetry(client, allocator, config, file.nombre, file.br, 5) catch |err| {
-        debug("  [!] {s} — error-br: {s}", .{ file.nombre, @errorName(err) });
+        debug("  [!] {s} | error-br tras {d} intentos: {s}", .{ file.nombre, 5, @errorName(err) });
         _ = confirmDownload(client, allocator, config, file.nombre, "error-br") catch {};
-        const line = try allocator.dupe(u8, "[!] error-br");
-        try summary_lines.append(line);
+        try summary_lines.append(try allocator.dupe(u8, "[!] error-br"));
         return err;
     };
     defer allocator.free(data);
 
-    const decompressed = if (is_br)
-        decompressBrotli(data, allocator) catch |err| {
-            debug("  [!] {s} — error-flat: descompresión falló ({s})", .{ file.nombre, @errorName(err) });
-            _ = confirmDownload(client, allocator, config, file.nombre, "error-flat") catch {};
-            const line = try allocator.dupe(u8, "[!] error-flat decompress");
-            try summary_lines.append(line);
-            return err;
-        }
-    else
-        data;
-    defer if (is_br) allocator.free(decompressed);
+    const br_full = formatFullHash(data);
+
+    const decompressed = decompressBrotli(data, allocator) catch |err| {
+        debug("  [!] {s} | error-flat: descompresión falló ({s})", .{ file.nombre, @errorName(err) });
+        _ = confirmDownload(client, allocator, config, file.nombre, "error-flat") catch {};
+        try summary_lines.append(try allocator.dupe(u8, "[!] error-flat decompress"));
+        return err;
+    };
+    defer allocator.free(decompressed);
+
+    const dbf_full = formatFullHash(decompressed);
 
     {
         const d_hash = computeShortHash(decompressed);
         if (file.flat.len > 0 and !std.mem.eql(u8, &d_hash, file.flat)) {
-            debug("  [!] {s} — error-flat: hash no coincide", .{file.nombre});
+            debug("  [!] {s} | error-flat: esperado={s} calculado={s}", .{ file.nombre, file.flat, &d_hash });
             _ = confirmDownload(client, allocator, config, file.nombre, "error-flat") catch {};
-            const line = try allocator.dupe(u8, "[!] error-flat hash");
-            try summary_lines.append(line);
+            try summary_lines.append(try allocator.dupe(u8, "[!] error-flat hash"));
             return error.FlatHashMismatch;
         }
     }
@@ -598,7 +601,9 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
             try confirmDownload(client, allocator, config, file.nombre, "skip");
             const age = computeAge(file.fecha_archivo);
-            const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} ({s}) - skip (post)", .{ origin_path, file.flat, file.br, age });
+            const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
+                origin_path, file.flat, file.br, dbf_full, age, br_full, age,
+            });
             try summary_lines.append(line);
             debug("{s}", .{line});
             return;
@@ -610,7 +615,9 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
             if (!answer) {
                 try confirmDownload(client, allocator, config, file.nombre, "skip");
                 const age = computeAge(file.fecha_archivo);
-                const line = try std.fmt.allocPrint(allocator, "[-] {s} {s} {s} ({s}) - omitido", .{ origin_path, file.flat, file.br, age });
+                const line = try std.fmt.allocPrint(allocator, "[-] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
+                    origin_path, file.flat, file.br, dbf_full, age, br_full, age,
+                });
                 try summary_lines.append(line);
                 debug("{s}", .{line});
                 return;
@@ -627,10 +634,9 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         defer std.heap.c_allocator.free(dest_path_z);
 
         writeFile(tmp_path, decompressed) catch |err| {
-            debug("  [!] {s} — error-tmp: {s}", .{ file.nombre, @errorName(err) });
+            debug("  [!] {s} | error-tmp: {s}", .{ file.nombre, @errorName(err) });
             _ = confirmDownload(client, allocator, config, file.nombre, "error-tmp") catch {};
-            const line = try allocator.dupe(u8, "[!] error-tmp");
-            try summary_lines.append(line);
+            try summary_lines.append(try allocator.dupe(u8, "[!] error-tmp"));
             return err;
         };
 
@@ -646,19 +652,19 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         }
 
         if (!rename_ok) {
-            debug("  [!] {s} — error-blocked tras 10 intentos", .{file.nombre});
+            debug("  [!] {s} | error-blocked tras 10 intentos", .{file.nombre});
             _ = confirmDownload(client, allocator, config, file.nombre, "error-blocked") catch {};
-            const line = try allocator.dupe(u8, "[!] error-blocked");
-            try summary_lines.append(line);
+            try summary_lines.append(try allocator.dupe(u8, "[!] error-blocked"));
             return error.FileBlocked;
         }
     }
 
     try confirmDownload(client, allocator, config, file.nombre, "downloaded");
 
-    const d_hash = computeShortHash(decompressed);
     const age = computeAge(file.fecha_archivo);
-    const line = try std.fmt.allocPrint(allocator, "[+] {s} {s} {s} {s} ({s})", .{ origin_path, file.flat, file.br, &d_hash, age });
+    const line = try std.fmt.allocPrint(allocator, "[+] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
+        origin_path, file.flat, file.br, dbf_full, age, br_full, age,
+    });
     try summary_lines.append(line);
     debug("{s}", .{line});
 }
