@@ -20,6 +20,11 @@ const Stat64 = extern struct {
     st_ctime: i64,
 };
 
+const Utimbuf = extern struct {
+    actime: i64,
+    modtime: i64,
+};
+
 const extern_fns = struct {
     extern fn BrotliDecoderCreateInstance(
         a: ?*const fn (*anyopaque, usize) callconv(cc) ?*anyopaque,
@@ -44,6 +49,7 @@ const extern_fns = struct {
     extern fn time(t: ?*i64) callconv(cc) i64;
     extern fn _stat64(path: [*:0]const u8, buf: *Stat64) callconv(cc) c_int;
     extern fn _kbhit() callconv(cc) c_int;
+    extern fn _utime(path: [*:0]const u8, times: ?*const Utimbuf) callconv(cc) c_int;
 };
 
 fn stderr() *anyopaque {
@@ -657,6 +663,12 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
             _ = confirmDownload(client, allocator, config, file.nombre, "error-blocked") catch {};
             try summary_lines.append(try allocator.dupe(u8, "[!] error-blocked"));
             return error.FileBlocked;
+        }
+
+        const epoch = parseTimestampEpoch(file.fecha_archivo);
+        if (epoch > 0) {
+            const ub = Utimbuf{ .actime = epoch, .modtime = epoch };
+            _ = extern_fns._utime(dest_path_z, &ub);
         }
     }
 
