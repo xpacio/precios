@@ -49,6 +49,7 @@ const extern_fns = struct {
     extern fn time(t: ?*i64) callconv(cc) i64;
     extern fn _stat64(path: [*:0]const u8, buf: *Stat64) callconv(cc) c_int;
     extern fn _kbhit() callconv(cc) c_int;
+    extern fn _getch() callconv(cc) c_int;
     extern fn _utime(path: [*:0]const u8, times: ?*const Utimbuf) callconv(cc) c_int;
 };
 
@@ -502,11 +503,10 @@ fn promptWithTimeout(prompt: []const u8, timeout_sec: i64) bool {
     _ = extern_fns.fwrite(prompt.ptr, 1, prompt.len, stderr());
     _ = extern_fns.fflush(stderr());
     const deadline = extern_fns.time(null) + timeout_sec;
-    var buf: [8]u8 = undefined;
     while (extern_fns.time(null) < deadline) {
         if (extern_fns._kbhit() != 0) {
-            const line = readLine(&buf) catch return false;
-            return line.len > 0 and (line[0] == 's' or line[0] == 'S');
+            const ch: u8 = @intCast(extern_fns._getch());
+            return ch == 's' or ch == 'S';
         }
     }
     return false;
