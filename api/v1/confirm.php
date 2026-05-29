@@ -13,6 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
 $sucursalId = $input['sucursal_id'] ?? $idSucursal;
 $archivoNombre = $input['nombre'] ?? null;
+$resultado = $input['resultado'] ?? 'downloaded';
 
 if (!$sucursalId || !$archivoNombre) {
     http_response_code(400);
@@ -20,14 +21,24 @@ if (!$sucursalId || !$archivoNombre) {
     exit;
 }
 
+if (!in_array($resultado, ['downloaded', 'skip', 'error-br', 'error-flat', 'error-tmp', 'error-blocked'], true)) {
+    http_response_code(400);
+    echo "ERROR: resultado inválido: {$resultado}";
+    exit;
+}
+
 try {
     $pdo = getDB();
 
     $stmt = $pdo->prepare("
-        UPDATE archivo_sucursal SET sync = TRUE, updated_at = NOW()
+        UPDATE archivo_sucursal
+        SET sync = TRUE,
+            ultimo_resultado = ?,
+            n_exitos = CASE WHEN ? = 'downloaded' THEN n_exitos + 1 ELSE n_exitos END,
+            updated_at = NOW()
         WHERE sucursal_id = ? AND nombre = ? AND enabled = TRUE
     ");
-    $stmt->execute([$sucursalId, $archivoNombre]);
+    $stmt->execute([$resultado, $resultado, $sucursalId, $archivoNombre]);
 
     if ($stmt->rowCount() === 0) {
         http_response_code(404);
@@ -36,7 +47,7 @@ try {
     }
 
     echo "STATUS: OK\n";
-    echo "MENSAJE: Archivo {$archivoNombre} marcado como sincronizado para sucursal {$sucursalId}\n";
+    echo "MENSAJE: Archivo {$archivoNombre} -> {$resultado}\n";
 
 } catch (Exception $e) {
     http_response_code(500);

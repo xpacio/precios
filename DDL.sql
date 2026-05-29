@@ -39,6 +39,7 @@ CREATE TABLE archivos (
     flat CHAR(6) DEFAULT '',
     br CHAR(6) DEFAULT '',
     xxh3 CHAR(6),
+
     comprimido BOOLEAN DEFAULT TRUE,
     status VARCHAR(10) DEFAULT 'ready',
     is_desblinde BOOLEAN DEFAULT FALSE,
@@ -60,6 +61,9 @@ CREATE TABLE archivo_sucursal (
     nombre VARCHAR(255) NOT NULL,
     enabled BOOLEAN DEFAULT TRUE,
     sync BOOLEAN DEFAULT FALSE,
+    ultimo_resultado VARCHAR(14) NOT NULL DEFAULT 'pending',
+    n_envios INT DEFAULT 0,
+    n_exitos INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (archivo_id, sucursal_id),

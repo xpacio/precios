@@ -105,6 +105,8 @@ function processAndCompressFile(string $ruta, string $nombre): array
             WHERE id = ?
         ")->execute([$peso, $flat, $br, $flat, $comprPct, $fechaArchivo, $archivoId]);
 
+        $pdo->prepare("UPDATE archivo_sucursal SET n_envios = 0, n_exitos = 0, ultimo_resultado = 'pending' WHERE archivo_id = ?")->execute([$archivoId]);
+
         return [
             'status' => 'OK',
             'accion' => 'UPDATE',

@@ -50,6 +50,9 @@ try {
         exit;
     }
 
+    $pdo->prepare("UPDATE archivos          SET n_descargas = n_descargas + 1       WHERE id = ?")->execute([$file['id']]);
+    $pdo->prepare("UPDATE archivo_sucursal SET n_envios    = n_envios    + 1       WHERE archivo_id = ? AND sucursal_id = ?")->execute([$file['id'], $sucursalId]);
+
     header('Content-Type: application/octet-stream');
     header('Content-Length: ' . filesize($brPath));
     header('X-FLAT: ' . $file['flat']);
