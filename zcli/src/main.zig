@@ -543,13 +543,13 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         try allocator.dupe(u8, output_name);
     defer allocator.free(origin_path);
 
-    const local_path_z = try std.heap.c_allocator.dupeZ(u8, origin_path);
-    defer std.heap.c_allocator.free(local_path_z);
+    const output_path_z = try std.heap.c_allocator.dupeZ(u8, output_name);
+    defer std.heap.c_allocator.free(output_path_z);
 
     var local_data: ?[]u8 = null;
     defer if (local_data) |ld| allocator.free(ld);
 
-    local_data = readFile(local_path_z) catch null;
+    local_data = readFile(output_path_z) catch null;
 
     if (local_data) |ld| {
         const local_hash = computeShortHash(ld);
@@ -608,7 +608,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
             debug("{s}", .{line});
             return;
         }
-        const local_mtime = getFileMtime(local_path_z);
+        const local_mtime = getFileMtime(output_path_z);
         const server_epoch = parseTimestampEpoch(file.fecha_archivo);
         if (server_epoch > 0 and local_mtime > 0 and local_mtime > server_epoch) {
             const answer = promptWithTimeout("  Local mas reciente. Sobrescribir? (s/N): ", 4);
@@ -626,11 +626,11 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
     }
 
     {
-        const tmp_path = try std.fmt.allocPrint(allocator, "{s}.tmp", .{origin_path});
+        const tmp_path = try std.fmt.allocPrint(allocator, "{s}.{d}.tmp", .{ output_name, extern_fns.time(null) });
         defer allocator.free(tmp_path);
         const tmp_path_z = try std.heap.c_allocator.dupeZ(u8, tmp_path);
         defer std.heap.c_allocator.free(tmp_path_z);
-        const dest_path_z = try std.heap.c_allocator.dupeZ(u8, origin_path);
+        const dest_path_z = try std.heap.c_allocator.dupeZ(u8, output_name);
         defer std.heap.c_allocator.free(dest_path_z);
 
         writeFile(tmp_path, decompressed) catch |err| {
