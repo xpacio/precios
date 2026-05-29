@@ -72,7 +72,8 @@ fn debugInline(comptime fmt: []const u8, args: anytype) void {
 }
 
 const BR_OK: c_int = 1;
-const BR_NEED: c_int = 2;
+const BR_NEED_INPUT: c_int = 2;
+const BR_NEED_OUTPUT: c_int = 3;
 
 pub fn main(init: std.process.Init.Minimal) !u8 {
     const allocator = std.heap.c_allocator;
@@ -308,7 +309,7 @@ fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const C
     const auth = httpHeader("X-API-Key", config.api_key);
     const headers = [_]std.http.Header{auth};
     var redirect_buf: [4096]u8 = undefined;
-    var response_buf: [5242880]u8 = undefined;
+    var response_buf: [10485760]u8 = undefined;
     var fw = std.Io.Writer.fixed(&response_buf);
 
     debug("  downloadFile: GET {s}", .{url});
@@ -482,8 +483,9 @@ fn decompressBrotli(input: []const u8, allocator: Allocator) ![]u8 {
         const rc = extern_fns.BrotliDecoderDecompressStream(d, &avail_in, &next_in, &avail_out, &next_out, null);
         if (avail_out < buf.len) try list.appendSlice(buf[0 .. buf.len - avail_out]);
         if (rc == BR_OK) break;
-        if (rc == BR_NEED and avail_in == 0) return error.UnexpectedEnd;
-        if (rc != BR_NEED) return error.BrotliError;
+        if (rc == BR_NEED_INPUT and avail_in == 0) return error.UnexpectedEnd;
+        if (rc == BR_NEED_INPUT or rc == BR_NEED_OUTPUT) continue;
+        return error.BrotliError;
     }
     const result = try list.toOwnedSlice();
     debug("  decompressBrotli: OK ({d} -> {d} bytes, {d:0.1}%)", .{ input.len, result.len, @as(f64, @floatFromInt(result.len)) / @as(f64, @floatFromInt(input.len)) * 100 });
