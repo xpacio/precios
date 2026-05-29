@@ -643,11 +643,12 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         var rename_ok = false;
         var attempt: u5 = 0;
         while (attempt < 10) : (attempt += 1) {
+            _ = extern_fns.remove(dest_path_z);
             if (extern_fns.rename(tmp_path_z, dest_path_z) == 0) {
                 rename_ok = true;
                 break;
             }
-            debug("  ⚠ La actualización del archivo {s} no puede completarse.\n    Debe cerrar el punto de venta y todas las terminales para poder actualizar los archivos.\n    Reintentando en 4s... (intento {}/10)", .{ output_name, attempt + 1 });
+            debug("  [!] La actualizacion del archivo {s} no puede completarse.\n    Debe cerrar el punto de venta y todas las terminales para poder actualizar los archivos.\n    Reintentando en 4s... (intento {}/10)", .{ output_name, attempt + 1 });
             sleepSeconds(4);
         }
 
