@@ -141,7 +141,8 @@ require __DIR__ . '/header.php';
         echo '<p>style="color:red"">Sucursal no encontrada</p>';
     } else {
         $stmt = $pdo->prepare("
-            SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.peso, a.is_desblinde, asu.sync, asu.created_at AS asociado_desde
+            SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.peso, a.is_desblinde, asu.sync, asu.created_at AS asociado_desde,
+                   asu.ultimo_resultado, asu.n_envios, asu.n_exitos
             FROM archivo_sucursal asu
             JOIN archivos a ON a.id = asu.archivo_id
             WHERE asu.sucursal_id = ? AND asu.enabled = TRUE
@@ -184,13 +185,16 @@ require __DIR__ . '/header.php';
                     <th>fl</th>
                     <th>br</th>
                     <th style="text-align:center;">Desblinde</th>
-                    <th>Sync</th>
+                    <th style="text-align:center;">Sync</th>
+                    <th style="text-align:center;">Resultado</th>
+                    <th style="text-align:center;">Env</th>
+                    <th style="text-align:center;">Ex</th>
                     <th>Acción</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($asociados)): ?>
-                    <tr><td colspan="6">Sin archivos asociados</td></tr>
+                    <tr><td colspan="9">Sin archivos asociados</td></tr>
                 <?php else: ?>
                     <?php foreach ($asociados as $a):
                         $estaSync = ($a['sync'] === 't' || $a['sync'] === true);
@@ -200,7 +204,25 @@ require __DIR__ . '/header.php';
                             <td><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code></td>
                             <td><code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
                             <td style="text-align:center;font-size:1.1rem;"><?= ($a['is_desblinde'] === 't' || $a['is_desblinde'] === true) ? '✓' : '' ?></td>
-                            <td><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>"<?= $estaSync ? ' checked' : '' ?>></td>
+                            <td style="text-align:center;"><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>"<?= $estaSync ? ' checked' : '' ?>></td>
+                            <?php
+                                $resultado = $a['ultimo_resultado'] ?? 'pending';
+                                $badgeColor = match ($resultado) {
+                                    'downloaded'    => '#2e7d32',
+                                    'skip'          => '#1565c0',
+                                    'pending'       => '#9e9e9e',
+                                    'error-br'      => '#c62828',
+                                    'error-flat'    => '#c62828',
+                                    'error-tmp'     => '#c62828',
+                                    'error-blocked' => '#e65100',
+                                    default         => '#9e9e9e',
+                                };
+                            ?>
+                            <td style="text-align:center;">
+                                <span style="display:inline-block;padding:0.1rem 0.4rem;border-radius:3px;background:<?= $badgeColor ?>;color:#fff;font-size:0.75rem;font-weight:600;"><?= htmlspecialchars($resultado) ?></span>
+                            </td>
+                            <td style="text-align:center;"><?= (int)($a['n_envios'] ?? 0) ?></td>
+                            <td style="text-align:center;"><?= (int)($a['n_exitos'] ?? 0) ?></td>
                             <td>
                                 <form method="POST" action="/dashboard/sucursales" style="display:inline">
                                     <input type="hidden" name="action" value="desasociar">
