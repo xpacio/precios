@@ -363,17 +363,51 @@ fn confirmDownload(client: *std.http.Client, allocator: Allocator, config: *cons
     debug("  confirmDownload: OK", .{});
 }
 
-fn formatFullHash(data: []const u8) [9]u8 {
-    var h = std.hash.XxHash3.init(0);
-    h.update(data);
-    const val = h.final();
-    const hi: u32 = @truncate(val >> 32);
-    const lo: u32 = @truncate(val);
-    var buf: [32]u8 = undefined;
-    const s = std.fmt.bufPrint(&buf, "{d}.{d}", .{ hi, lo }) catch "0.0";
-    var result: [9]u8 = [9]u8{ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' };
-    for (s[0..@min(s.len, 9)], 0..) |c, i| result[i] = c;
-    return result;
+fn confirmBatch(client: *std.http.Client, allocator: Allocator, config: *const Config, skip_names: []const []const u8) !void {
+    if (skip_names.len == 0) return;
+
+    var body_list = std.array_list.Managed(u8).init(allocator);
+    defer body_list.deinit();
+
+    try body_list.appendSlice("{\"sucursal_id\":\"");
+    try body_list.appendSlice(config.sucursal_id);
+    try body_list.appendSlice("\",\"batch\":[");
+    for (skip_names, 0..) |name, i| {
+        if (i > 0) try body_list.appendSlice(",");
+        try body_list.appendSlice("{\"nombre\":\"");
+        try body_list.appendSlice(name);
+        try body_list.appendSlice("\",\"resultado\":\"skip\"}");
+    }
+    try body_list.appendSlice("]}");
+
+    const url = try std.fmt.allocPrint(allocator, "{s}/api/v1/confirm", .{config.api_base_url});
+    defer allocator.free(url);
+
+    const auth = httpHeader("X-API-Key", config.api_key);
+    const content_type = httpHeader("Content-Type", "application/json");
+    const x_batch = httpHeader("X-Batch", "true");
+    const headers = [_]std.http.Header{ content_type, x_batch, auth };
+    var redirect_buf: [4096]u8 = undefined;
+    var resp_buf: [1024]u8 = undefined;
+    var fw = std.Io.Writer.fixed(&resp_buf);
+
+    debug("  confirmBatch: POST {s} ({d} archivos)", .{ url, skip_names.len });
+    const result = client.fetch(.{
+        .location = .{ .url = url },
+        .method = .POST,
+        .payload = body_list.items,
+        .extra_headers = &headers,
+        .redirect_buffer = &redirect_buf,
+        .response_writer = &fw,
+    }) catch |err| {
+        debug("  confirmBatch: ERROR {s}", .{@errorName(err)});
+        return err;
+    };
+    if (result.status.class() != .success) {
+        debug("  confirmBatch: status={s}", .{@tagName(result.status.class())});
+        return error.HttpError;
+    }
+    debug("  confirmBatch: OK", .{});
 }
 
 fn computeFullHashU64(data: []const u8) u64 {
@@ -436,10 +470,16 @@ fn parseTimestampEpoch(ts: []const u8) i64 {
 
 fn computeAge(ts: []const u8) [8]u8 {
     var result: [8]u8 = [8]u8{ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' };
-    if (ts.len == 0) return result;
+    if (ts.len == 0) {
+        result[3] = '-';
+        return result;
+    }
 
     const ts_epoch = parseTimestampEpoch(ts);
-    if (ts_epoch == 0) return result;
+    if (ts_epoch == 0) {
+        result[3] = '-';
+        return result;
+    }
 
     const now = extern_fns.time(null);
     const diff = now - ts_epoch;
@@ -489,7 +529,7 @@ fn decompressBrotli(input: []const u8, allocator: Allocator) ![]u8 {
         return error.BrotliError;
     }
     const result = try list.toOwnedSlice();
-    debug("  decompressBrotli: OK ({d} -> {d} bytes, {d:0.1}%)", .{ input.len, result.len, @as(f64, @floatFromInt(result.len)) / @as(f64, @floatFromInt(input.len)) * 100 });
+    debug("  decompressBrotli: OK ({d} -> {d} bytes, {d:0.1}% of original)", .{ input.len, result.len, @as(f64, @floatFromInt(input.len)) / @as(f64, @floatFromInt(result.len)) * 100 });
     return result;
 }
 
@@ -559,21 +599,6 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 
     local_data = readFile(output_path_z) catch null;
 
-    if (local_data) |ld| {
-        const local_hash = computeShortHash(ld);
-        if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
-            try confirmDownload(client, allocator, config, file.nombre, "skip");
-            const bh = formatFullHash(ld);
-            const age = computeAge(file.fecha_archivo);
-            const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
-                origin_path, file.flat, file.br, bh, age, bh, age,
-            });
-            try summary_lines.append(line);
-            debug("{s}", .{line});
-            return;
-        }
-    }
-
     const data = tryDownloadWithRetry(client, allocator, config, file.nombre, file.br, 5) catch |err| {
         debug("  [!] {s} | error-br tras {d} intentos: {s}", .{ file.nombre, 5, @errorName(err) });
         _ = confirmDownload(client, allocator, config, file.nombre, "error-br") catch {};
@@ -582,8 +607,6 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
     };
     defer allocator.free(data);
 
-    const br_full = formatFullHash(data);
-
     const decompressed = decompressBrotli(data, allocator) catch |err| {
         debug("  [!] {s} | error-flat: descompresión falló ({s})", .{ file.nombre, @errorName(err) });
         _ = confirmDownload(client, allocator, config, file.nombre, "error-flat") catch {};
@@ -591,8 +614,6 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         return err;
     };
     defer allocator.free(decompressed);
-
-    const dbf_full = formatFullHash(decompressed);
 
     {
         const d_hash = computeShortHash(decompressed);
@@ -609,8 +630,8 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
             try confirmDownload(client, allocator, config, file.nombre, "skip");
             const age = computeAge(file.fecha_archivo);
-            const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
-                origin_path, file.flat, file.br, dbf_full, age, br_full, age,
+            const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} ({s})", .{
+                file.flat, file.br, origin_path, age,
             });
             try summary_lines.append(line);
             debug("{s}", .{line});
@@ -623,8 +644,9 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
             if (!answer) {
                 try confirmDownload(client, allocator, config, file.nombre, "skip");
                 const age = computeAge(file.fecha_archivo);
-                const line = try std.fmt.allocPrint(allocator, "[-] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
-                    origin_path, file.flat, file.br, dbf_full, age, br_full, age,
+                const comp_pct = @as(f64, @floatFromInt(data.len)) / @as(f64, @floatFromInt(decompressed.len)) * 100;
+                const line = try std.fmt.allocPrint(allocator, "[-] {s} {s} {s} ({s}) {d:.0}%", .{
+                    file.flat, file.br, origin_path, age, comp_pct,
                 });
                 try summary_lines.append(line);
                 debug("{s}", .{line});
@@ -677,8 +699,9 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
     try confirmDownload(client, allocator, config, file.nombre, "downloaded");
 
     const age = computeAge(file.fecha_archivo);
-    const line = try std.fmt.allocPrint(allocator, "[+] {s} {s} {s} {s} ({s}) - {s} ({s})", .{
-        origin_path, file.flat, file.br, dbf_full, age, br_full, age,
+    const comp_pct = @as(f64, @floatFromInt(data.len)) / @as(f64, @floatFromInt(decompressed.len)) * 100;
+    const line = try std.fmt.allocPrint(allocator, "[+] {s} {s} {s} ({s}) {d:.0}%", .{
+        file.flat, file.br, origin_path, age, comp_pct,
     });
     try summary_lines.append(line);
     debug("{s}", .{line});
@@ -718,11 +741,57 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
         summary_lines.deinit();
     }
 
-    var fail_count: u32 = 0;
+    // Phase 1: Pre-analysis — scan all local files
+    var skip_indices = std.array_list.Managed(usize).init(allocator);
+    defer skip_indices.deinit();
+    var pending_indices = std.array_list.Managed(usize).init(allocator);
+    defer pending_indices.deinit();
 
-    for (files, 1..) |file, i| {
-        debugInline("[{d}/{d}] {s} ... ", .{ i, files.len, file.nombre });
-        processFile(client, allocator, config, &file, &summary_lines) catch {
+    for (files, 0..) |file, idx| {
+        const output_name = if (std.mem.endsWith(u8, file.nombre, ".br"))
+            file.nombre[0 .. file.nombre.len - 3]
+        else
+            file.nombre;
+        const output_z = try std.heap.c_allocator.dupeZ(u8, output_name);
+        defer std.heap.c_allocator.free(output_z);
+
+        const local_data = readFile(output_z) catch null;
+        if (local_data) |ld| {
+            defer allocator.free(ld);
+            const local_hash = computeShortHash(ld);
+            if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
+                try skip_indices.append(idx);
+                const origin_path = if (file.ruta.len > 0)
+                    try std.fmt.allocPrint(allocator, "{s}/{s}", .{ file.ruta, output_name })
+                else
+                    try allocator.dupe(u8, output_name);
+                defer allocator.free(origin_path);
+                const age = computeAge(file.fecha_archivo);
+                const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} ({s})", .{
+                    file.flat, file.br, origin_path, age,
+                });
+                try summary_lines.append(line);
+                continue;
+            }
+        }
+        try pending_indices.append(idx);
+    }
+
+    // Phase 2: Batch report all skips in one HTTP call
+    {
+        var skip_names = std.array_list.Managed([]const u8).init(allocator);
+        defer skip_names.deinit();
+        for (skip_indices.items) |idx| try skip_names.append(files[idx].nombre);
+        confirmBatch(client, allocator, config, skip_names.items) catch |err| {
+            debug("  [!] Error reportando skips batch: {s}", .{@errorName(err)});
+        };
+    }
+
+    // Phase 3: Download and process only pending files
+    var fail_count: u32 = 0;
+    for (pending_indices.items, 1..) |idx, i| {
+        debugInline("[{d}/{d}] {s} ... ", .{ i, pending_indices.items.len, files[idx].nombre });
+        processFile(client, allocator, config, &files[idx], &summary_lines) catch {
             fail_count += 1;
         };
     }
