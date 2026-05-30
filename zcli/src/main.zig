@@ -728,7 +728,11 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
         allocator.free(files);
     }
 
-    debug("Archivos en lista: {d}", .{files.len});
+    debugInline("Modo de descarga (NOR/DBD) [NOR]: ", .{});
+    var mode_buf: [8]u8 = undefined;
+    const mode_line = readLine(&mode_buf) catch "NOR";
+    const is_dbd = std.mem.eql(u8, std.mem.trim(u8, mode_line, " \n\r"), "DBD");
+    debug("Modo: {s} — {d} archivos en lista", .{ if (is_dbd) "DBD" else "NOR", files.len });
 
     if (files.len == 0) {
         debug("No hay archivos en la lista", .{});
@@ -748,6 +752,8 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
     defer pending_indices.deinit();
 
     for (files, 0..) |file, idx| {
+        const file_is_dbd = std.mem.indexOf(u8, file.ruta, "DSBLIND") != null;
+        if (is_dbd != file_is_dbd) continue;
         const output_name = if (std.mem.endsWith(u8, file.nombre, ".br"))
             file.nombre[0 .. file.nombre.len - 3]
         else
