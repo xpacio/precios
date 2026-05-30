@@ -225,10 +225,7 @@ require __DIR__ . '/header.php';
                         <td><a href="http://precios.servicios.care/dashboard/sucursales?sucursal=<?= urlencode($s['id_sucursal']) ?>"><code><?= htmlspecialchars($s['id_sucursal']) ?></code></a></td>
                         <td><?= htmlspecialchars($s['nombre_sucursal']) ?></td>
                         <td><input type="checkbox" class="toggle-enabled" data-id="<?= htmlspecialchars($s['id_sucursal']) ?>"<?= $activo ? ' checked' : '' ?>></td>
-                        <td style="text-align:center;cursor:pointer;">
-                            <input type="checkbox" class="toggle-sync" data-id="<?= htmlspecialchars($s['id_sucursal']) ?>"<?= ($s['sync'] === 't' || $s['sync'] === true) ? ' checked' : '' ?> style="display:none">
-                            <svg class="sync-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="<?= ($s['sync'] === 't' || $s['sync'] === true) ? '#2e7d32' : '#888' ?>" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19 18a3.5 3.5 0 0 0 0 -7h-1a5 4.5 0 0 0 -11 -2a4.6 4.4 0 0 0 -2.1 8.4"/><path d="M12 13l0 9"/><path d="M9 19l3 3l3 -3"/></svg>
-                        </td>
+                        <td><input type="checkbox" class="toggle-sync" data-id="<?= htmlspecialchars($s['id_sucursal']) ?>"<?= ($s['sync'] === 't' || $s['sync'] === true) ? ' checked' : '' ?>></td>
                         <td>
                             <form method="POST" style="display:inline">
                                 <input type="hidden" name="action" value="desasociar">
@@ -258,31 +255,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     var tr = cb.closest('tr');
                     tr.style.opacity = cb.checked ? '1' : '0.4';
                 }
-                if (action === 'toggle-sync') {
-                    var svg = cb.parentNode.querySelector('.sync-svg');
-                    if (svg) svg.setAttribute('stroke', cb.checked ? '#2e7d32' : '#888');
-                }
             })
-            .catch(function () {
-                cb.checked = !cb.checked;
-                if (action === 'toggle-sync') {
-                    var svg = cb.parentNode.querySelector('.sync-svg');
-                    if (svg) svg.setAttribute('stroke', cb.checked ? '#2e7d32' : '#888');
-                }
-            });
+            .catch(function () { cb.checked = !cb.checked; });
     }
     document.querySelectorAll('.toggle-sync').forEach(function (cb) {
         cb.addEventListener('change', function () { toggleField('toggle-sync', this); });
     });
     document.querySelectorAll('.toggle-enabled').forEach(function (cb) {
         cb.addEventListener('change', function () { toggleField('toggle-enabled', this); });
-    });
-    document.querySelectorAll('.sync-svg').forEach(function (svg) {
-        svg.addEventListener('click', function () {
-            var cb = this.parentNode.querySelector('.toggle-sync');
-            cb.checked = !cb.checked;
-            cb.dispatchEvent(new Event('change'));
-        });
     });
 
     document.getElementById('btnSyncOne').addEventListener('click', function () {
