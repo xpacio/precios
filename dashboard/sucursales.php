@@ -24,6 +24,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 
+    // === AJAX: toggle enabled ===
+    if ($_POST['action'] === 'toggle-enabled' && $sucursalId && $archivoId) {
+        header('Content-Type: application/json');
+        $enabled = !empty($_POST['enabled']);
+        try {
+            $pdo->prepare("UPDATE archivo_sucursal SET enabled = ? WHERE archivo_id = ? AND sucursal_id = ?")
+                ->execute([$enabled ? 't' : 'f', $archivoId, $sucursalId]);
+            echo json_encode(['ok' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     if ($_POST['action'] === 'editar' && $sucursalId) {
         $nuevoNombre = trim($_POST['nombre_sucursal'] ?? '');
         $enabled = !empty($_POST['enabled']) ? 't' : 'f';
@@ -141,12 +155,12 @@ require __DIR__ . '/header.php';
         echo '<p>style="color:red"">Sucursal no encontrada</p>';
     } else {
         $stmt = $pdo->prepare("
-            SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.peso, asu.sync, asu.es_desblinde, asu.created_at AS asociado_desde,
+            SELECT a.id, a.ruta, a.nombre, a.flat, a.br, a.peso, asu.enabled, asu.sync, asu.es_desblinde, asu.created_at AS asociado_desde,
                    asu.ultimo_resultado, asu.n_envios, asu.n_exitos
             FROM archivo_sucursal asu
             JOIN archivos a ON a.id = asu.archivo_id
-            WHERE asu.sucursal_id = ? AND asu.enabled = TRUE
-            ORDER BY a.ruta, a.nombre
+            WHERE asu.sucursal_id = ?
+            ORDER BY asu.enabled DESC, a.ruta, a.nombre
         ");
         $stmt->execute([$sucursalDetalle]);
         $asociados = $stmt->fetchAll();
@@ -185,6 +199,7 @@ require __DIR__ . '/header.php';
                     <th>fl</th>
                     <th>br</th>
                     <th style="text-align:center;">Tipo</th>
+                    <th style="text-align:center;">Activo</th>
                     <th style="text-align:center;">Sync</th>
                     <th style="text-align:center;">Resultado</th>
                     <th style="text-align:center;">Env</th>
@@ -194,12 +209,13 @@ require __DIR__ . '/header.php';
             </thead>
             <tbody>
                 <?php if (empty($asociados)): ?>
-                    <tr><td colspan="9">Sin archivos asociados</td></tr>
+                    <tr><td colspan="10">Sin archivos asociados</td></tr>
                 <?php else: ?>
                     <?php foreach ($asociados as $a):
                         $estaSync = ($a['sync'] === 't' || $a['sync'] === true);
+                        $estaActivo = ($a['enabled'] === 't' || $a['enabled'] === true);
                     ?>
-                        <tr>
+                        <tr<?= $estaActivo ? '' : ' style="opacity:0.4;"' ?>>
                             <td><a href="/dashboard/archivo-editar?id=<?= (int)$a['id'] ?>"><?= htmlspecialchars(str_replace('/srv/precios/', '', $a['ruta']) . '/' . $a['nombre']) ?></a></td>
                             <td><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code></td>
                             <td><code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
@@ -210,6 +226,7 @@ require __DIR__ . '/header.php';
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e81ac" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M8 11v-4a4 4 0 1 1 8 0v4"/></svg>
                               <?php endif; ?>
                             </td>
+                            <td style="text-align:center;"><input type="checkbox" class="toggle-enabled" data-id="<?= (int)$a['id'] ?>"<?= $estaActivo ? ' checked' : '' ?>></td>
                             <td style="text-align:center;"><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>"<?= $estaSync ? ' checked' : '' ?>></td>
                             <?php
                                 $resultado = $a['ultimo_resultado'] ?? 'pending';
@@ -259,6 +276,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                     if (!data.ok) cb.checked = !cb.checked;
+                })
+                .catch(function () { cb.checked = !cb.checked; });
+        });
+    });
+    document.querySelectorAll('.toggle-enabled').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            var formData = new FormData();
+            formData.append('action', 'toggle-enabled');
+            formData.append('sucursal_id', '<?= htmlspecialchars($sucursalDetalle) ?>');
+            formData.append('archivo_id', this.dataset.id);
+            formData.append('enabled', this.checked ? '1' : '');
+            fetch('/dashboard/sucursales', { method: 'POST', body: formData })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.ok) cb.checked = !cb.checked;
+                    else {
+                        var tr = cb.closest('tr');
+                        tr.style.opacity = cb.checked ? '1' : '0.4';
+                    }
                 })
                 .catch(function () { cb.checked = !cb.checked; });
         });
