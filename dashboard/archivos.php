@@ -736,7 +736,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var rutaArrow = (listarSort === 'ruta') ? ' ▾' : '';
                 var fechaArrow = (listarSort === 'fecha_archivo') ? ' ▾' : '';
-                var html = '<table><thead><tr><th>Ruta' + rutaArrow + '</th><th>Archivo</th><th>Peso</th><th>Desc</th><th>fl</th><th>br</th><th>Comp.</th><th>Disp</th><th>Modificado' + fechaArrow + '</th><th>Carga</th><th>Status</th><th>Activo</th></tr></thead><tbody>';
+                var html = '<table><thead><tr><th>Ruta' + rutaArrow + '</th><th>Archivo</th><th>Peso</th><th>Desc</th><th>fl</th><th>br</th><th>Comp.</th><th>Disp</th><th>Modificado' + fechaArrow + '</th><th>Carga</th><th>Status</th><th>Tipo</th><th>Activo</th></tr></thead><tbody>';
                 for (var i = 0; i < data.results.length; i++) {
                     var f = data.results[i];
                     var dispPct = f.total_suc > 0 ? Math.round(f.sync_suc / f.total_suc * 100) : -1;
@@ -764,6 +764,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + ' (' + timeago(f.fecha_archivo) + ')' + '</td>';
                     html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_carga) + ' (' + timeago(f.fecha_carga) + ')' + '</td>';
                     html += '<td>' + (f.status === 'ausente' ? '<span style="color:#e65100;font-weight:bold;">Ausente</span>' : escapeHtml(f.status || '-')) + '</td>';
+                    html += '<td style="text-align:center;">' +
+                      (f.ruta.indexOf('DSBLIND') !== -1
+                        ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#bf616a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2l0 -6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M8 11v-5a4 4 0 0 1 8 0"/></svg>'
+                        : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e81ac" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M8 11v-4a4 4 0 1 1 8 0v4"/></svg>') +
+                    '</td>';
                     html += '<td><input type="checkbox" class="toggle-enabled" data-id="' + f.id + '"' + (f.enabled ? ' checked' : '') + '></td>';
                     html += '</tr>';
                 }

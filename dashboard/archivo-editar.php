@@ -188,6 +188,15 @@ require __DIR__ . '/header.php';
                 <input type="text" name="nombre" value="<?= htmlspecialchars($arch['nombre']) ?>" required>
             </label>
         </div>
+        <div style="margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
+          <?php if (strpos($arch['ruta'], 'DSBLIND') !== false): ?>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#bf616a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2l0 -6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M8 11v-5a4 4 0 0 1 8 0"/></svg>
+            <span style="color:#bf616a;font-size:0.85rem;">Desblinde</span>
+          <?php else: ?>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5e81ac" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M8 11v-4a4 4 0 1 1 8 0v4"/></svg>
+            <span style="color:#5e81ac;font-size:0.85rem;">Normal</span>
+          <?php endif; ?>
+        </div>
         <button type="submit">Guardar Cambios</button>
     </form>
 </article>
