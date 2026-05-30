@@ -24,7 +24,7 @@ try {
                a.updated_at AS ultimo_cambio, a.fecha_archivo
         FROM archivo_sucursal asu
         JOIN archivos a ON a.id = asu.archivo_id
-        WHERE asu.sucursal_id = ? AND asu.enabled = TRUE AND a.status = 'ready' AND asu.sync = FALSE
+        WHERE asu.sucursal_id = ? AND asu.enabled = TRUE AND a.status = 'ready'
         ORDER BY a.nombre
     ");
     $stmt->execute([$idSucursal]);
