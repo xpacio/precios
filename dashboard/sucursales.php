@@ -210,7 +210,11 @@ require __DIR__ . '/header.php';
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5e81ac" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M8 11v-4a4 4 0 1 1 8 0v4"/></svg>
                               <?php endif; ?>
                             </td>
-                            <td style="text-align:center;"><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>"<?= $estaSync ? ' checked' : '' ?>></td>
+                            <td style="text-align:center;">
+                              <?php if ($estaSync): ?>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19 18a3.5 3.5 0 0 0 0 -7h-1a5 4.5 0 0 0 -11 -2a4.6 4.4 0 0 0 -2.1 8.4"/><path d="M12 13l0 9"/><path d="M9 19l3 3l3 -3"/></svg>
+                              <?php endif; ?>
+                            </td>
                             <?php
                                 $resultado = $a['ultimo_resultado'] ?? 'pending';
                                 $badgeColor = match ($resultado) {
