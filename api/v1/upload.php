@@ -70,7 +70,9 @@ try {
         throw new Exception("No se pudo mover el archivo al almacenamiento fisico.");
     }
 
-    $pdo->prepare("INSERT INTO archivo_sucursal (archivo_id, sucursal_id, nombre) VALUES (?, ?, ?)")->execute([$archivoId, $idSucursal, $finalFileName]);
+    $esDesblinde = $hRuta && strpos($hRuta, 'DSBLIND') !== false;
+    $pdo->prepare("INSERT INTO archivo_sucursal (archivo_id, sucursal_id, nombre, es_desblinde) VALUES (?, ?, ?, ?)")
+        ->execute([$archivoId, $idSucursal, $finalFileName, $esDesblinde ? 't' : 'f']);
     $pdo->commit();
 
     echo "STATUS: OK\nID: $archivoId\nMENSAJE: Archivo cargado y registrado exitosamente";

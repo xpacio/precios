@@ -60,29 +60,14 @@ try {
             exit;
         }
 
-        // Validar duplicado solo si ambos (existente y nuevo) son archivos normales
-        $esNormal = strpos($archivo['ruta'], 'DSBLIND') === false;
-        if ($esNormal) {
-            $stmt = $pdo->prepare("
-                SELECT 1 FROM archivo_sucursal asu
-                JOIN archivos a ON a.id = asu.archivo_id
-                WHERE asu.sucursal_id = ?
-                  AND asu.nombre = ?
-                  AND asu.enabled = TRUE
-                  AND a.ruta NOT LIKE '%DSBLIND%'
-            ");
-            $stmt->execute([$sucursalId, $archivo['nombre']]);
-            if ($stmt->fetch()) {
-                http_response_code(409);
-                echo json_encode(['error' => "La sucursal ya tiene un archivo normal con nombre '{$archivo['nombre']}'"]);
-                exit;
-            }
-        }
+        $esDesblinde = strpos($archivo['ruta'], 'DSBLIND') !== false;
 
         $pdo->prepare("
-            INSERT INTO archivo_sucursal (archivo_id, sucursal_id, nombre)
-            VALUES (?, ?, ?)
-        ")->execute([$archivoId, $sucursalId, $archivo['nombre']]);
+            INSERT INTO archivo_sucursal (archivo_id, sucursal_id, nombre, es_desblinde)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (sucursal_id, nombre, es_desblinde)
+            DO UPDATE SET archivo_id = EXCLUDED.archivo_id
+        ")->execute([$archivoId, $sucursalId, $archivo['nombre'], $esDesblinde ? 't' : 'f']);
 
         http_response_code(201);
         echo json_encode(['status' => 'OK', 'mensaje' => 'Asociación creada']);

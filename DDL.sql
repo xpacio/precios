@@ -58,6 +58,7 @@ CREATE TABLE archivo_sucursal (
     archivo_id INT NOT NULL REFERENCES archivos(id) ON DELETE CASCADE,
     sucursal_id VARCHAR(5) NOT NULL REFERENCES sucursales(id_sucursal),
     nombre VARCHAR(255) NOT NULL,
+    es_desblinde BOOLEAN DEFAULT FALSE,
     enabled BOOLEAN DEFAULT TRUE,
     sync BOOLEAN DEFAULT FALSE,
     ultimo_resultado VARCHAR(14) NOT NULL DEFAULT 'pending',
@@ -65,7 +66,8 @@ CREATE TABLE archivo_sucursal (
     n_exitos INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (archivo_id, sucursal_id)
+    PRIMARY KEY (archivo_id, sucursal_id),
+    UNIQUE (sucursal_id, nombre, es_desblinde)
 );
 
 CREATE INDEX idx_archivo_sucursal_sucursal_id ON archivo_sucursal (sucursal_id);

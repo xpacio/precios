@@ -21,26 +21,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'relac
     $inserted = 0;
     $errors = [];
 
-    $nombreStmt = $pdo->prepare("SELECT nombre FROM archivos WHERE id = ?");
+    $archivoStmt = $pdo->prepare("SELECT nombre, ruta FROM archivos WHERE id = ?");
     $upsertStmt = $pdo->prepare("
-        INSERT INTO archivo_sucursal (archivo_id, sucursal_id, nombre)
-        VALUES (?, ?, ?)
-        ON CONFLICT ON CONSTRAINT archivo_sucursal_sucursal_id_nombre_key
+        INSERT INTO archivo_sucursal (archivo_id, sucursal_id, nombre, es_desblinde)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (sucursal_id, nombre, es_desblinde)
         DO UPDATE SET archivo_id = EXCLUDED.archivo_id, enabled = TRUE, sync = FALSE
     ");
 
     foreach ($archivoIds as $aid) {
-        $nombreStmt->execute([(int)$aid]);
-        $arch = $nombreStmt->fetch();
+        $archivoStmt->execute([(int)$aid]);
+        $arch = $archivoStmt->fetch();
         if (!$arch) {
             $errors[] = "Archivo ID $aid no encontrado";
             continue;
         }
         $nombre = $arch['nombre'];
+        $esDesblinde = strpos($arch['ruta'], 'DSBLIND') !== false;
 
         foreach ($sucursalIds as $sid) {
             try {
-                $upsertStmt->execute([(int)$aid, $sid, $nombre]);
+                $upsertStmt->execute([(int)$aid, $sid, $nombre, $esDesblinde ? 't' : 'f']);
                 $inserted++;
             } catch (Exception $e) {
                 $errors[] = "Error al relacionar archivo $aid con sucursal $sid: " . $e->getMessage();
