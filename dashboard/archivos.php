@@ -73,7 +73,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'elimi
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'registrar') {
     $ruta = trim($_POST['ruta'] ?? '');
     $nombre = trim($_POST['nombre'] ?? '');
-    $is_desblinde = !empty($_POST['is_desblinde']);
     $isAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
 
     $resp = ['status' => 'OK', 'mensaje' => '', 'log' => []];
@@ -93,14 +92,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
             $resp['mensaje'] = "Archivo no encontrado en el origen remoto: $relPath";
         } else {
             try {
-                $is_desblinde_val = $is_desblinde ? 't' : 'f';
                 $stmt = $pdo->prepare("
-                    INSERT INTO archivos (ruta, nombre, enabled, is_desblinde)
-                    VALUES (?, ?, TRUE, ?)
+                    INSERT INTO archivos (ruta, nombre, enabled)
+                    VALUES (?, ?, TRUE)
                     ON CONFLICT (ruta, nombre) DO UPDATE
-                    SET enabled = TRUE, is_desblinde = EXCLUDED.is_desblinde, status = 'updating'
+                    SET enabled = TRUE, status = 'updating'
                 ");
-                $stmt->execute([$ruta, $nombre, $is_desblinde_val]);
+                $stmt->execute([$ruta, $nombre]);
                 $result = processAndCompressFile($ruta, $nombre);
                 if ($result['status'] === 'OK') {
                     $resp['mensaje'] = "Archivo '$nombre' registrado, sincronizado y comprimido exitosamente.";
@@ -139,24 +137,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggl
     if ($id) {
         try {
             $pdo->prepare("UPDATE archivos SET enabled = ? WHERE id = ?")->execute([$enabled ? 't' : 'f', $id]);
-            echo json_encode(['ok' => true]);
-        } catch (Exception $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-    } else {
-        echo json_encode(['ok' => false, 'error' => 'ID inválido']);
-    }
-    exit;
-}
-
-// === POST: toggle desblinde ===
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggle-desblinde') {
-    header('Content-Type: application/json');
-    $id = (int)($_POST['id'] ?? 0);
-    $is_desblinde = !empty($_POST['is_desblinde']);
-    if ($id) {
-        try {
-            $pdo->prepare("UPDATE archivos SET is_desblinde = ? WHERE id = ?")->execute([$is_desblinde ? 't' : 'f', $id]);
             echo json_encode(['ok' => true]);
         } catch (Exception $e) {
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -255,7 +235,7 @@ if ($type === 'archivos-listar' && ($_GET['ajax'] ?? false)) {
 
     $whereClause = $q ? "WHERE a.ruta ILIKE ? OR a.nombre ILIKE ?" : "";
     $sql = "
-        SELECT a.id, a.ruta, a.nombre, a.peso, a.n_descargas, a.status, a.enabled, a.is_desblinde, a.fecha_carga,
+        SELECT a.id, a.ruta, a.nombre, a.peso, a.n_descargas, a.status, a.enabled, a.fecha_carga,
                a.flat, a.br, a.compr_pct, a.fecha_archivo,
                (SELECT COUNT(*) FROM archivo_sucursal WHERE archivo_id = a.id AND enabled = TRUE) AS total_suc,
                (SELECT COUNT(*) FROM archivo_sucursal WHERE archivo_id = a.id AND enabled = TRUE AND sync = TRUE) AS sync_suc
@@ -406,10 +386,7 @@ require __DIR__ . '/header.php';
                     Nombre
                     <input type="text" name="nombre" required placeholder="LISTA.CDX">
                 </label>
-                <label>
-                    <input type="checkbox" name="is_desblinde" value="1">
-                    Es desblinde
-                </label>
+
             </div>
             <button type="submit">Registrar Archivo</button>
         </form>
@@ -758,7 +735,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var rutaArrow = (listarSort === 'ruta') ? ' ▾' : '';
                 var fechaArrow = (listarSort === 'fecha_archivo') ? ' ▾' : '';
-                var html = '<table><thead><tr><th>Ruta' + rutaArrow + '</th><th>Archivo</th><th>Peso</th><th>Desc</th><th>fl</th><th>br</th><th>Comp.</th><th>Disp</th><th>Modificado' + fechaArrow + '</th><th>Carga</th><th>Status</th><th>Desblinde</th><th>Activo</th></tr></thead><tbody>';
+                var html = '<table><thead><tr><th>Ruta' + rutaArrow + '</th><th>Archivo</th><th>Peso</th><th>Desc</th><th>fl</th><th>br</th><th>Comp.</th><th>Disp</th><th>Modificado' + fechaArrow + '</th><th>Carga</th><th>Status</th><th>Activo</th></tr></thead><tbody>';
                 for (var i = 0; i < data.results.length; i++) {
                     var f = data.results[i];
                     var dispPct = f.total_suc > 0 ? Math.round(f.sync_suc / f.total_suc * 100) : -1;
@@ -786,7 +763,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_archivo) + ' (' + timeago(f.fecha_archivo) + ')' + '</td>';
                     html += '<td style="font-size:0.85rem;">' + fmtFecha(f.fecha_carga) + ' (' + timeago(f.fecha_carga) + ')' + '</td>';
                     html += '<td>' + (f.status === 'ausente' ? '<span style="color:#e65100;font-weight:bold;">Ausente</span>' : escapeHtml(f.status || '-')) + '</td>';
-                    html += '<td><input type="checkbox" class="toggle-desblinde" data-id="' + f.id + '"' + (f.is_desblinde ? ' checked' : '') + '></td>';
                     html += '<td><input type="checkbox" class="toggle-enabled" data-id="' + f.id + '"' + (f.enabled ? ' checked' : '') + '></td>';
                     html += '</tr>';
                 }
@@ -834,27 +810,6 @@ document.addEventListener('DOMContentLoaded', function () {
                             })
                             .catch(function () {
                                 cb.checked = !enabled;
-                            });
-                    });
-                });
-
-                container.querySelectorAll('.toggle-desblinde').forEach(function (cb) {
-                    cb.addEventListener('change', function () {
-                        var id = this.dataset.id;
-                        var checked = this.checked;
-                        var formData = new FormData();
-                        formData.append('action', 'toggle-desblinde');
-                        formData.append('id', id);
-                        formData.append('is_desblinde', checked ? '1' : '');
-                        fetch('/dashboard/archivos', { method: 'POST', body: formData })
-                            .then(function (r) { return r.json(); })
-                            .then(function (data) {
-                                if (!data.ok) {
-                                    cb.checked = !checked;
-                                }
-                            })
-                            .catch(function () {
-                                cb.checked = !checked;
                             });
                     });
                 });

@@ -79,7 +79,7 @@ public class SyncService(ApiClient api, string sucursalId)
 
         while (true)
         {
-            Console.Write("Seleccione archivo (número), T=todos, D=desblinde, S=salir: ");
+            Console.Write("Seleccione archivo (número), T=todos, S=salir: ");
             var line = Console.ReadLine();
             if (line == null) break;
             var input = line.Trim().ToLower();

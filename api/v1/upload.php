@@ -19,7 +19,7 @@ $hRuta      = $_SERVER['HTTP_RUTA'] ?? null;
 $hFlat      = $_SERVER['HTTP_FLAT'] ?? null;
 $hBr        = $_SERVER['HTTP_BR'] ?? null;
 $hFecha     = $_SERVER['HTTP_FECHA_ARCHIVO'] ?? null;
-$hDesblinde = $_SERVER['HTTP_IS_DESBLINDE'] ?? '0';
+
 
 if (!isset($_FILES['archivo'])) {
     http_response_code(400);
@@ -52,7 +52,7 @@ try {
 
     $finalFileName = $hNombre ?? $fileName ?? $file['name'];
 
-    $stmt = $pdo->prepare("INSERT INTO archivos (nombre, ruta, peso, flat, br, fecha_carga, is_desblinde, n_descargas) VALUES (?, ?, ?, ?, ?, ?, ?, 0) RETURNING id");
+    $stmt = $pdo->prepare("INSERT INTO archivos (nombre, ruta, peso, flat, br, fecha_carga, n_descargas) VALUES (?, ?, ?, ?, ?, ?, 0) RETURNING id");
     $stmt->execute([
         $finalFileName,
         $hRuta,
@@ -60,7 +60,6 @@ try {
         substr($hFlat ?? $calculatedFlat, 0, 4),
         substr($hBr ?? '', 0, 4),
         $hFecha ?? date('Y-m-d H:i:s'),
-        ($hDesblinde === '1' ? 'true' : 'false'),
     ]);
 
     $archivoId = $stmt->fetchColumn();
@@ -71,7 +70,7 @@ try {
         throw new Exception("No se pudo mover el archivo al almacenamiento fisico.");
     }
 
-    $pdo->prepare("INSERT INTO archivo_sucursal (archivo_id, sucursal_id) VALUES (?, ?)")->execute([$archivoId, $idSucursal]);
+    $pdo->prepare("INSERT INTO archivo_sucursal (archivo_id, sucursal_id, nombre) VALUES (?, ?, ?)")->execute([$archivoId, $idSucursal, $finalFileName]);
     $pdo->commit();
 
     echo "STATUS: OK\nID: $archivoId\nMENSAJE: Archivo cargado y registrado exitosamente";

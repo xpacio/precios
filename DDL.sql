@@ -42,7 +42,6 @@ CREATE TABLE archivos (
 
     comprimido BOOLEAN DEFAULT TRUE,
     status VARCHAR(10) DEFAULT 'ready',
-    is_desblinde BOOLEAN DEFAULT FALSE,
     enabled BOOLEAN DEFAULT FALSE,
     n_descargas INT DEFAULT 0,
     fecha_carga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -66,8 +65,7 @@ CREATE TABLE archivo_sucursal (
     n_exitos INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (archivo_id, sucursal_id),
-    UNIQUE (sucursal_id, nombre)
+    PRIMARY KEY (archivo_id, sucursal_id)
 );
 
 CREATE INDEX idx_archivo_sucursal_sucursal_id ON archivo_sucursal (sucursal_id);

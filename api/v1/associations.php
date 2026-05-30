@@ -49,8 +49,8 @@ try {
             exit;
         }
 
-        // Obtener nombre del archivo
-        $stmt = $pdo->prepare("SELECT id, nombre FROM archivos WHERE id = ?");
+        // Obtener nombre y ruta del archivo
+        $stmt = $pdo->prepare("SELECT id, nombre, ruta FROM archivos WHERE id = ?");
         $stmt->execute([$archivoId]);
         $archivo = $stmt->fetch();
 
@@ -60,17 +60,23 @@ try {
             exit;
         }
 
-        // Validar que la sucursal no tenga ya un archivo con el mismo nombre
-        $stmt = $pdo->prepare("
-            SELECT 1 FROM archivo_sucursal asu
-            JOIN archivos a ON a.id = asu.archivo_id
-            WHERE asu.sucursal_id = ? AND a.nombre = ? AND asu.enabled = TRUE
-        ");
-        $stmt->execute([$sucursalId, $archivo['nombre']]);
-        if ($stmt->fetch()) {
-            http_response_code(409);
-            echo json_encode(['error' => "La sucursal ya tiene un archivo con nombre '{$archivo['nombre']}'"]);
-            exit;
+        // Validar duplicado solo si ambos (existente y nuevo) son archivos normales
+        $esNormal = strpos($archivo['ruta'], 'DSBLIND') === false;
+        if ($esNormal) {
+            $stmt = $pdo->prepare("
+                SELECT 1 FROM archivo_sucursal asu
+                JOIN archivos a ON a.id = asu.archivo_id
+                WHERE asu.sucursal_id = ?
+                  AND asu.nombre = ?
+                  AND asu.enabled = TRUE
+                  AND a.ruta NOT LIKE '%DSBLIND%'
+            ");
+            $stmt->execute([$sucursalId, $archivo['nombre']]);
+            if ($stmt->fetch()) {
+                http_response_code(409);
+                echo json_encode(['error' => "La sucursal ya tiene un archivo normal con nombre '{$archivo['nombre']}'"]);
+                exit;
+            }
         }
 
         $pdo->prepare("

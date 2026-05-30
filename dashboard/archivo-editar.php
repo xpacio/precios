@@ -44,7 +44,7 @@ if (!$id) {
     exit;
 }
 
-$archivo = $pdo->prepare("SELECT id, ruta, nombre, is_desblinde, fecha_archivo, fecha_carga FROM archivos WHERE id = ?");
+$archivo = $pdo->prepare("SELECT id, ruta, nombre, fecha_archivo, fecha_carga FROM archivos WHERE id = ?");
 $archivo->execute([$id]);
 $arch = $archivo->fetch();
 
@@ -135,14 +135,13 @@ $sucursales = $sucStmt->fetchAll();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'editar') {
     $ruta = trim($_POST['ruta'] ?? '');
     $nombre = trim($_POST['nombre'] ?? '');
-    $isDesblinde = !empty($_POST['is_desblinde']);
 
     if ($ruta === '' || $nombre === '') {
         $error = 'Ruta y nombre son obligatorios.';
     } else {
         try {
-            $stmt = $pdo->prepare("UPDATE archivos SET ruta = ?, nombre = ?, is_desblinde = ? WHERE id = ?");
-            $stmt->execute([$ruta, $nombre, $isDesblinde ? 't' : 'f', $id]);
+            $stmt = $pdo->prepare("UPDATE archivos SET ruta = ?, nombre = ? WHERE id = ?");
+            $stmt->execute([$ruta, $nombre, $id]);
             $mensaje = "Archivo actualizado exitosamente.";
             $arch['ruta'] = $ruta;
             $arch['nombre'] = $nombre;
@@ -189,10 +188,6 @@ require __DIR__ . '/header.php';
                 <input type="text" name="nombre" value="<?= htmlspecialchars($arch['nombre']) ?>" required>
             </label>
         </div>
-        <label>
-            <input type="checkbox" name="is_desblinde" value="1" <?= ($arch['is_desblinde'] === 't' || $arch['is_desblinde'] === true) ? 'checked' : '' ?>>
-            Es desblinde
-        </label>
         <button type="submit">Guardar Cambios</button>
     </form>
 </article>
