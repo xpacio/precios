@@ -908,36 +908,34 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
         return 0;
     }
 
-    // Ask user to select file group
-    print("", .{});
-    print("Tipo de archivos:", .{});
-    if (has_dbd) print("[1] DBD ({d} archivos)", .{dbd_indices.items.len});
-    if (has_nor) print("[2] NOR ({d} archivos)", .{nor_indices.items.len});
-
+    // Select file group (DBD or NOR)
     var selected = std.array_list.Managed(usize).init(allocator);
     defer selected.deinit();
     var sel_name: []const u8 = undefined;
 
-    const mode_choice = menuChoice("Seleccione [1]: ", 10, '1');
-    switch (mode_choice) {
-        '2' => {
-            if (has_nor) {
+    if (has_dbd and has_nor) {
+        // Both groups exist: ask user
+        print("", .{});
+        print("Tipo de archivos:", .{});
+        print("[1] DBD ({d})", .{dbd_indices.items.len});
+        print("[2] NOR ({d})", .{nor_indices.items.len});
+        const mode_choice = menuChoice("Seleccione [1]: ", 10, '1');
+        switch (mode_choice) {
+            '2' => {
                 for (nor_indices.items) |idx| try selected.append(idx);
                 sel_name = "NOR";
-            } else {
+            },
+            else => {
                 for (dbd_indices.items) |idx| try selected.append(idx);
                 sel_name = "DBD";
-            }
-        },
-        else => {
-            if (has_dbd) {
-                for (dbd_indices.items) |idx| try selected.append(idx);
-                sel_name = "DBD";
-            } else {
-                for (nor_indices.items) |idx| try selected.append(idx);
-                sel_name = "NOR";
-            }
-        },
+            },
+        }
+    } else if (has_dbd) {
+        for (dbd_indices.items) |idx| try selected.append(idx);
+        sel_name = "DBD";
+    } else {
+        for (nor_indices.items) |idx| try selected.append(idx);
+        sel_name = "NOR";
     }
 
     return processFiles(client, allocator, config, files, selected.items, sel_name);
