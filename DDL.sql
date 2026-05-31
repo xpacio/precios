@@ -83,6 +83,22 @@ VALUES ('precios_api_key_2024', 'API Key por defecto del administrador', 1, TRUE
 INSERT INTO sucursales (id_sucursal, nombre_sucursal, enabled) VALUES
 ('00000', 'Sucursal de Pruebas', TRUE);
 
+CREATE TABLE cli_log (
+    id SERIAL PRIMARY KEY,
+    sucursal_id VARCHAR(50) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_type VARCHAR(10) NOT NULL,
+    api_key_id INT REFERENCES api_keys(id),
+    usuario_id INT REFERENCES usuarios(id),
+    ip_address VARCHAR(45),
+    status VARCHAR(10) DEFAULT 'ok',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX cli_log_sucursal_idx ON cli_log(sucursal_id);
+CREATE INDEX cli_log_created_idx ON cli_log(created_at);
+CREATE INDEX cli_log_type_idx ON cli_log(file_type);
+
 CREATE TABLE sync_log (
     id SERIAL PRIMARY KEY,
     mode VARCHAR(20) NOT NULL,

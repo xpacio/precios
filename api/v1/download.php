@@ -67,6 +67,10 @@ try {
     $pdo->prepare("UPDATE archivos SET n_descargas = n_descargas + 1 WHERE id = ?")
         ->execute([$fileRow['id']]);
 
+    $fileType = strpos($fileRow['ruta'], 'DSBLIND') !== false ? 'DBD' : 'NOR';
+    $stmt = $pdo->prepare("INSERT INTO cli_log (sucursal_id, file_name, file_type, api_key_id, ip_address) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$idSucursal, $fileRow['nombre'], $fileType, $GLOBALS['_api_key_id'] ?? null, $_SERVER['REMOTE_ADDR'] ?? '']);
+
     readfile($brPath);
     exit;
 

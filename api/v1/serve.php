@@ -61,6 +61,10 @@ try {
     $pdo->prepare("UPDATE archivos          SET n_descargas = n_descargas + 1       WHERE id = ?")->execute([$file['id']]);
     $pdo->prepare("UPDATE archivo_sucursal SET n_envios    = n_envios    + 1       WHERE archivo_id = ? AND sucursal_id = ?")->execute([$file['id'], $sucursalId]);
 
+    $fileType = strpos($file['ruta'], 'DSBLIND') !== false ? 'DBD' : 'NOR';
+    $stmt = $pdo->prepare("INSERT INTO cli_log (sucursal_id, file_name, file_type, api_key_id, ip_address) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$sucursalId, $file['nombre'], $fileType, $GLOBALS['_api_key_id'] ?? null, $_SERVER['REMOTE_ADDR'] ?? '']);
+
     header('Content-Type: application/octet-stream');
     header('Content-Length: ' . filesize($brPath));
     header('X-FLAT: ' . $file['flat']);

@@ -66,6 +66,7 @@
                 <li><a href="/dashboard/sucursales" class="<?= $currentPage === 'sucursales' ? 'contrast' : '' ?>">Sucursales</a></li>
                 <li><a href="/dashboard/sync" class="<?= $currentPage === 'sync' ? 'contrast' : '' ?>">Sincronización</a></li>
                 <li><a href="/dashboard/sync-log" class="<?= $currentPage === 'sync-log' ? 'contrast' : '' ?>">Sync Log</a></li>
+                <li><a href="/dashboard/cli-log" class="<?= $currentPage === 'cli-log' ? 'contrast' : '' ?>">Cli Log</a></li>
                 <li><a href="/dashboard/usuarios" class="<?= $currentPage === 'usuarios' ? 'contrast' : '' ?>">Usuarios</a></li>
                 <li><a href="/dashboard/logout">Salir</a></li>
             </ul>

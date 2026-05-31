@@ -1,5 +1,7 @@
 <?php
 
+$GLOBALS['_api_key_id'] = null;
+
 function requireApiKey(): void
 {
     $apiKey = $_SERVER['HTTP_X_API_KEY'] ?? '';
@@ -23,6 +25,8 @@ function requireApiKey(): void
             echo "ERROR: API Key invalida o deshabilitada";
             exit;
         }
+
+        $GLOBALS['_api_key_id'] = (int)$key['id'];
     } catch (Exception $e) {
         http_response_code(500);
         header('Content-Type: text/plain');
