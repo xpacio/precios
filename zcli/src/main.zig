@@ -750,7 +750,31 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
     print("{s}", .{line});
 }
 
-fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const Config, files: []PendingFile, indices: []const usize, group_name: []const u8) !u8 {
+fn downloadGroup(client: *std.http.Client, allocator: Allocator, config: *const Config, files: []PendingFile, indices: []const usize, group_name: []const u8) u8 {
+    const t0 = extern_fns.time(null);
+    var fail_count: u32 = 0;
+    for (indices, 1..) |idx, i| {
+        var summary_dummy = std.array_list.Managed([]u8).init(allocator);
+        defer {
+            for (summary_dummy.items) |s| allocator.free(s);
+            summary_dummy.deinit();
+        }
+        printInline("[{d}/{d}] {s} ... ", .{ i, indices.len, files[idx].nombre });
+        processFile(client, allocator, config, &files[idx], &summary_dummy, true) catch {
+            fail_count += 1;
+        };
+    }
+    const elapsed = extern_fns.time(null) - t0;
+    const elapsed_m = @divTrunc(elapsed, 60);
+    const elapsed_s = @mod(elapsed, 60);
+    print("", .{});
+    print("=== Resumen ({s}) ===", .{group_name});
+    print("{} fallos en {d}m {d}s", .{ fail_count, elapsed_m, elapsed_s });
+    if (fail_count > 0) return 1;
+    return 0;
+}
+
+fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const Config, files: []PendingFile, indices: []const usize, group_name: []const u8, has_dbd: bool) !u8 {
     const t0 = extern_fns.time(null);
 
     var summary_lines = std.array_list.Managed([]u8).init(allocator);
@@ -806,7 +830,11 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
     }
     print("", .{});
 
-    const choice = menuChoice("[t]odos, [d]istintos, des[b]linde, [s]alir [d]: ", 10, 'D');
+    const menu_prompt = if (has_dbd)
+        "[t]odos, [f]altantes, [b]linde, [s]alir [f]: "
+    else
+        "[t]odos, [f]altantes, [s]alir [f]: ";
+    const choice = menuChoice(menu_prompt, 10, 'F');
 
     var fail_count: u32 = 0;
 
@@ -814,8 +842,8 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
         'S' => {
             return 0;
         },
-        'B' => {
-            return 0;
+        'B', 'b' => {
+            return 2;
         },
         'T' => {
             for (indices, 1..) |idx, i| {
@@ -904,39 +932,19 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
     const has_nor = nor_indices.items.len > 0;
 
     if (!has_dbd and !has_nor) {
-        print("No hay archivos DBD ni NOR.", .{});
+        print("No hay archivos pendientes.", .{});
         return 0;
     }
 
-    // Select file group (DBD or NOR)
-    var selected = std.array_list.Managed(usize).init(allocator);
-    defer selected.deinit();
-    var sel_name: []const u8 = undefined;
-
-    if (has_dbd and has_nor) {
-        // Both groups exist: ask user
-        print("", .{});
-        print("Tipo de archivos:", .{});
-        print("[1] DBD ({d})", .{dbd_indices.items.len});
-        print("[2] NOR ({d})", .{nor_indices.items.len});
-        const mode_choice = menuChoice("Seleccione [1]: ", 10, '1');
-        switch (mode_choice) {
-            '2' => {
-                for (nor_indices.items) |idx| try selected.append(idx);
-                sel_name = "NOR";
-            },
-            else => {
-                for (dbd_indices.items) |idx| try selected.append(idx);
-                sel_name = "DBD";
-            },
+    if (has_nor) {
+        const result = try processFiles(client, allocator, config, files, nor_indices.items, "NOR", has_dbd);
+        if (result == 2 and has_dbd) {
+            print("", .{});
+            return downloadGroup(client, allocator, config, files, dbd_indices.items, "DBD");
         }
-    } else if (has_dbd) {
-        for (dbd_indices.items) |idx| try selected.append(idx);
-        sel_name = "DBD";
-    } else {
-        for (nor_indices.items) |idx| try selected.append(idx);
-        sel_name = "NOR";
+        return result;
     }
 
-    return processFiles(client, allocator, config, files, selected.items, sel_name);
+    // Only DBD files
+    return downloadGroup(client, allocator, config, files, dbd_indices.items, "DBD");
 }
