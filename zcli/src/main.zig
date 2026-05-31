@@ -884,6 +884,24 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
         }
     }
 
+    // Initialize status array from pre-analysis
+    var statuses = try allocator.alloc(u8, indices.len);
+    defer allocator.free(statuses);
+    for (indices, 0..) |idx, i| {
+        var found: bool = false;
+        for (eq_indices.items) |ti| if (ti == idx) {
+            statuses[i] = '=';
+            found = true;
+            break;
+        };
+        if (!found) for (old_indices.items) |ti| if (ti == idx) {
+            statuses[i] = '-';
+            found = true;
+            break;
+        };
+        if (!found) statuses[i] = '+';
+    }
+
     var fail_count: u32 = 0;
 
     const menu_prompt = if (has_dbd)
@@ -896,15 +914,10 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
         print("", .{});
         for (indices, 0..) |idx, i| {
             const file = &files[idx];
-            const status: u8 = status: {
-                for (eq_indices.items) |ti| if (ti == idx) break :status '=';
-                for (old_indices.items) |ti| if (ti == idx) break :status '-';
-                break :status '+';
-            };
             if (file.ruta.len > 0) {
-                print("[{d}] {c} {s} {s}/{s}", .{ i + 1, status, file.fecha_archivo, file.ruta, file.nombre });
+                print("[{d}] {c} {s} {s}/{s}", .{ i + 1, statuses[i], file.fecha_archivo, file.ruta, file.nombre });
             } else {
-                print("[{d}] {c} {s} {s}", .{ i + 1, status, file.fecha_archivo, file.nombre });
+                print("[{d}] {c} {s} {s}", .{ i + 1, statuses[i], file.fecha_archivo, file.nombre });
             }
         }
         print("", .{});
@@ -984,9 +997,12 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
         }
         const idx = indices[num - 1];
         printInline("[1/1] {s} ... ", .{files[idx].nombre});
-        processFile(client, allocator, config, &files[idx], &summary_lines, false) catch {
+        if (processFile(client, allocator, config, &files[idx], &summary_lines, false)) {
+            statuses[num - 1] = '=';
+        } else |_| {
+            statuses[num - 1] = 'E';
             fail_count += 1;
-        };
+        }
         // Continue loop to show menu again
     }
 
