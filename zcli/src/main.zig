@@ -996,6 +996,7 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
             continue;
         }
         const idx = indices[num - 1];
+        print("", .{}); // newline after prompt input
         printInline("[1/1] {s} ... ", .{files[idx].nombre});
         if (processFile(client, allocator, config, &files[idx], &summary_lines, false)) {
             statuses[num - 1] = '=';
