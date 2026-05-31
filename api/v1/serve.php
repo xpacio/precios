@@ -13,6 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $sucursalId = $idSucursal;
 $fileName = $fileName ?? null;
+$fileRuta = $_SERVER['HTTP_X_RUTA'] ?? null;
 
 if (!$sucursalId || !$fileName) {
     http_response_code(400);
@@ -24,14 +25,21 @@ if (!$sucursalId || !$fileName) {
 try {
     $pdo = getDB();
 
-    $stmt = $pdo->prepare("
+    $query = "
         SELECT a.id, a.ruta, a.nombre, a.flat, a.br
         FROM archivo_sucursal asu
         JOIN archivos a ON a.id = asu.archivo_id
-        WHERE asu.sucursal_id = ? AND a.nombre = ? AND asu.enabled = TRUE AND a.status = 'ready'
-        LIMIT 1
-    ");
-    $stmt->execute([$sucursalId, $fileName]);
+        WHERE asu.sucursal_id = ? AND a.nombre = ? AND asu.enabled = TRUE AND a.status = 'ready'";
+    $params = [$sucursalId, $fileName];
+
+    if ($fileRuta) {
+        $query .= " AND a.ruta = ?";
+        $params[] = $fileRuta;
+    }
+    $query .= " LIMIT 1";
+
+    $stmt = $pdo->prepare($query);
+    $stmt->execute($params);
     $file = $stmt->fetch();
 
     if (!$file) {

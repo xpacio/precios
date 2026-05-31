@@ -323,12 +323,13 @@ fn fetchFiles(client: *std.http.Client, allocator: Allocator, config: *const Con
     return files;
 }
 
-fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8) ![]u8 {
+fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, ruta: []const u8) ![]u8 {
     const url = try std.fmt.allocPrint(allocator, "{s}/api/v1/serve/{s}/{s}", .{ config.api_base_url, config.sucursal_id, nombre });
     defer allocator.free(url);
 
     const auth = httpHeader("X-API-Key", config.api_key);
-    const headers = [_]std.http.Header{auth};
+    const ruta_hdr = httpHeader("X-Ruta", ruta);
+    const headers = [_]std.http.Header{ auth, ruta_hdr };
     var redirect_buf: [4096]u8 = undefined;
     var response_buf: [10485760]u8 = undefined;
     var fw = std.Io.Writer.fixed(&response_buf);
@@ -585,10 +586,10 @@ fn menuChoice(prompt: []const u8, timeout_sec: i64, default: u8) u8 {
     return default;
 }
 
-fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, file_br: []const u8, max_retries: u5) ![]u8 {
+fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, ruta: []const u8, file_br: []const u8, max_retries: u5) ![]u8 {
     var i: u5 = 0;
     while (i < max_retries) : (i += 1) {
-        const data = downloadFile(client, allocator, config, nombre) catch |err| {
+        const data = downloadFile(client, allocator, config, nombre, ruta) catch |err| {
             if (i + 1 < max_retries) {
                 debug("  [!] {s} | Error download (intento {}/{}), re-descargando...", .{ nombre, i + 1, max_retries });
                 continue;
@@ -640,7 +641,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 
     local_data = readFile(output_path_z) catch null;
 
-    const data = tryDownloadWithRetry(client, allocator, config, file.nombre, file.br, 5) catch |err| {
+    const data = tryDownloadWithRetry(client, allocator, config, file.nombre, file.ruta, file.br, 5) catch |err| {
         debug("  [!] {s} | error-br tras {d} intentos: {s}", .{ file.nombre, 5, @errorName(err) });
         _ = confirmDownload(client, allocator, config, file.nombre, "error-br") catch {};
         try summary_lines.append(try allocator.dupe(u8, "[!] error-br"));
