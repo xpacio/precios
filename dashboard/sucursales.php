@@ -166,17 +166,11 @@ require __DIR__ . '/header.php';
         $asociados = $stmt->fetchAll();
 
     ?>
-    <div style="margin-bottom:0.75rem;">
-        <strong><?= htmlspecialchars($suc['id_sucursal']) ?> — <?= htmlspecialchars($suc['nombre_sucursal']) ?></strong>
-    </div>
-    <nav class="tabs">
-        <ul>
-            <li><a href="#" data-tab="archivos" class="contrast">Archivos (<?= count($asociados) ?>)</a></li>
-            <li><a href="#" data-tab="editar">Editar</a></li>
-        </ul>
-    </nav>
+    <h2>
+        <a href="/dashboard/sucursales" class="secondary">&larr; Volver</a>
+        Sucursal: <?= htmlspecialchars($suc['id_sucursal']) ?> - <?= htmlspecialchars($suc['nombre_sucursal']) ?>
+    </h2>
 
-    <div id="tab-editar" class="tab-content" style="display:none;">
     <article>
         <form method="POST" action="/dashboard/sucursales" style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap;">
             <input type="hidden" name="action" value="editar">
@@ -192,12 +186,11 @@ require __DIR__ . '/header.php';
             <button type="submit" class="secondary outline" style="padding:0.3rem 0.8rem;">Guardar</button>
         </form>
     </article>
-    </div>
 
-    <div id="tab-archivos" class="tab-content">
     <style>
         .compact-table td, .compact-table th { padding:0.2rem 0.5rem !important; }
     </style>
+    <h3>Archivos Asociados (<?= count($asociados) ?>)</h3>
     <div class="table-container">
         <table class="compact-table" style="font-size:0.85rem;">
             <thead>
@@ -267,7 +260,6 @@ require __DIR__ . '/header.php';
             </tbody>
         </table>
     </div>
-    </div>
 
     <?php } ?>
 
@@ -307,15 +299,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 .catch(function () { cb.checked = !cb.checked; });
         });
     });
-    document.querySelectorAll('.tabs a[data-tab]').forEach(function (link) {
-        link.addEventListener('click', function (e) {
-            e.preventDefault();
-            document.querySelectorAll('.tabs a').forEach(function (a) { a.classList.remove('contrast'); });
-            link.classList.add('contrast');
-            document.querySelectorAll('.tab-content').forEach(function (d) { d.style.display = 'none'; });
-            document.getElementById('tab-' + link.dataset.tab).style.display = '';
-        });
-    });
+});
 </script>
 <?php else: ?>
     <nav class="tabs">
