@@ -57,6 +57,26 @@ fn stderr() *anyopaque {
     return extern_fns.__acrt_iob_func(2);
 }
 
+fn stdout() *anyopaque {
+    return extern_fns.__acrt_iob_func(1);
+}
+
+fn print(comptime fmt: []const u8, args: anytype) void {
+    var buf: [4096]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buf, fmt, args) catch "(print error)";
+    _ = extern_fns.fwrite(msg.ptr, 1, msg.len, stdout());
+    _ = extern_fns.fwrite("\n".ptr, 1, 1, stdout());
+    _ = extern_fns.fflush(stdout());
+}
+
+fn printInline(comptime fmt: []const u8, args: anytype) void {
+    var buf: [4096]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buf, fmt, args) catch "(print error)";
+    _ = extern_fns.fwrite(msg.ptr, 1, msg.len, stdout());
+    _ = extern_fns.fflush(stdout());
+}
+
+
 fn debug(comptime fmt: []const u8, args: anytype) void {
     var buf: [4096]u8 = undefined;
     const msg = std.fmt.bufPrint(&buf, fmt, args) catch "(debug error)";
@@ -540,7 +560,7 @@ fn getFileMtime(path_z: [:0]const u8) i64 {
 }
 
 fn promptWithTimeout(prompt: []const u8, timeout_sec: i64) bool {
-    _ = extern_fns.fwrite(prompt.ptr, 1, prompt.len, stderr());
+    _ = extern_fns.fwrite(prompt.ptr, 1, prompt.len, stdout());
     _ = extern_fns.fflush(stderr());
     const deadline = extern_fns.time(null) + timeout_sec;
     while (extern_fns.time(null) < deadline) {
@@ -553,7 +573,7 @@ fn promptWithTimeout(prompt: []const u8, timeout_sec: i64) bool {
 }
 
 fn menuChoice(prompt: []const u8, timeout_sec: i64, default: u8) u8 {
-    _ = extern_fns.fwrite(prompt.ptr, 1, prompt.len, stderr());
+    _ = extern_fns.fwrite(prompt.ptr, 1, prompt.len, stdout());
     _ = extern_fns.fflush(stderr());
     const deadline = extern_fns.time(null) + timeout_sec;
     while (extern_fns.time(null) < deadline) {
@@ -590,6 +610,20 @@ fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: 
         return data;
     }
     return error.BrHashMismatch;
+}
+
+fn isDbd(ruta: []const u8) bool {
+    if (ruta.len < 3) return false;
+    var prefix: [3]u8 = undefined;
+    for (ruta[0..3], 0..) |c, i| prefix[i] = toUpper(c);
+    return std.mem.eql(u8, &prefix, "DBD");
+}
+
+fn isNor(ruta: []const u8) bool {
+    if (ruta.len < 3) return false;
+    var prefix: [3]u8 = undefined;
+    for (ruta[0..3], 0..) |c, i| prefix[i] = toUpper(c);
+    return std.mem.eql(u8, &prefix, "NOR");
 }
 
 fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Config, file: *const PendingFile, summary_lines: *std.array_list.Managed([]u8), force_download: bool) !void {
@@ -648,7 +682,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
                     file.flat, file.br, origin_path, age,
                 });
                 try summary_lines.append(line);
-                debug("{s}", .{line});
+                print("{s}", .{line});
                 return;
             }
             const local_mtime = getFileMtime(output_path_z);
@@ -663,7 +697,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
                         file.flat, file.br, origin_path, age, comp_pct,
                     });
                     try summary_lines.append(line);
-                    debug("{s}", .{line});
+                    print("{s}", .{line});
                     return;
                 }
             }
@@ -719,41 +753,21 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         file.flat, file.br, origin_path, age, comp_pct,
     });
     try summary_lines.append(line);
-    debug("{s}", .{line});
+    print("{s}", .{line});
 }
 
-fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config) !u8 {
-    debug("=== Sync iniciado - Sucursal: {s} ===", .{config.sucursal_id});
-
+fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const Config, files: []PendingFile, indices: []const usize, group_name: []const u8) !u8 {
     const t0 = extern_fns.time(null);
-
-    const files = fetchFiles(client, allocator, config) catch |err| {
-        debug("Error fetching file list: {s}", .{@errorName(err)});
-        return 1;
-    };
-    defer {
-        for (files) |f| {
-            allocator.free(f.nombre);
-            allocator.free(f.ruta);
-            allocator.free(f.flat);
-            allocator.free(f.br);
-            allocator.free(f.ultimo_cambio);
-            allocator.free(f.fecha_archivo);
-        }
-        allocator.free(files);
-    }
-
-    debug("Archivos en lista: {d}", .{files.len});
-
-    if (files.len == 0) {
-        debug("No hay archivos en la lista", .{});
-        return 0;
-    }
 
     var summary_lines = std.array_list.Managed([]u8).init(allocator);
     defer {
         for (summary_lines.items) |s| allocator.free(s);
         summary_lines.deinit();
+    }
+
+    if (indices.len == 0) {
+        print("No hay archivos {s}.", .{group_name});
+        return 0;
     }
 
     // Pre-analysis: determine which files already match locally
@@ -762,7 +776,8 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
     var falta_indices = std.array_list.Managed(usize).init(allocator);
     defer falta_indices.deinit();
 
-    for (files, 0..) |file, idx| {
+    for (indices) |idx| {
+        const file = &files[idx];
         const output_name = if (std.mem.endsWith(u8, file.nombre, ".br"))
             file.nombre[0 .. file.nombre.len - 3]
         else
@@ -783,8 +798,9 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
     }
 
     // Show menu with numbered files and status
-    debug("", .{});
-    for (files, 0..) |file, idx| {
+    print("", .{});
+    for (indices, 0..) |idx, i| {
+        const file = &files[idx];
         const tiene = blk: {
             for (tiene_indices.items) |ti| {
                 if (ti == idx) break :blk true;
@@ -792,9 +808,9 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             break :blk false;
         };
         const status = if (tiene) "tiene" else "falta";
-        debug("[{d}] {s} - [{s}]", .{ idx + 1, file.nombre, status });
+        print("[{d}] {s} - [{s}]", .{ i + 1, file.nombre, status });
     }
-    debug("", .{});
+    print("", .{});
 
     const choice = menuChoice("[t]odos, [d]istintos, des[b]linde, [s]alir [d]: ", 10, 'D');
 
@@ -808,8 +824,8 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             return 0;
         },
         'T' => {
-            for (0..files.len, 1..) |idx, i| {
-                debugInline("[{d}/{d}] {s} ... ", .{ i, files.len, files[idx].nombre });
+            for (indices, 1..) |idx, i| {
+                printInline("[{d}/{d}] {s} ... ", .{ i, indices.len, files[idx].nombre });
                 processFile(client, allocator, config, &files[idx], &summary_lines, true) catch {
                     fail_count += 1;
                 };
@@ -826,7 +842,7 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             }
 
             for (falta_indices.items, 1..) |idx, i| {
-                debugInline("[{d}/{d}] {s} ... ", .{ i, falta_indices.items.len, files[idx].nombre });
+                printInline("[{d}/{d}] {s} ... ", .{ i, falta_indices.items.len, files[idx].nombre });
                 processFile(client, allocator, config, &files[idx], &summary_lines, false) catch {
                     fail_count += 1;
                 };
@@ -838,14 +854,97 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
     const elapsed_m = @divTrunc(elapsed, 60);
     const elapsed_s = @mod(elapsed, 60);
 
-    debug("", .{});
-    debug("=== Resumen ===", .{});
+    print("", .{});
+    print("=== Resumen ({s}) ===", .{group_name});
     for (summary_lines.items) |line| {
-        debug("{s}", .{line});
+        print("{s}", .{line});
     }
-    debug("", .{});
-    debug("{} fallos en {d}m {d}s", .{ fail_count, elapsed_m, elapsed_s });
+    print("", .{});
+    print("{} fallos en {d}m {d}s", .{ fail_count, elapsed_m, elapsed_s });
 
     if (fail_count > 0) return 1;
     return 0;
+}
+
+fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config) !u8 {
+    print("=== Sincronizacion - Sucursal: {s} ===", .{config.sucursal_id});
+
+    const files = fetchFiles(client, allocator, config) catch |err| {
+        debug("Error fetching file list: {s}", .{@errorName(err)});
+        return 1;
+    };
+    defer {
+        for (files) |f| {
+            allocator.free(f.nombre);
+            allocator.free(f.ruta);
+            allocator.free(f.flat);
+            allocator.free(f.br);
+            allocator.free(f.ultimo_cambio);
+            allocator.free(f.fecha_archivo);
+        }
+        allocator.free(files);
+    }
+
+    debug("Archivos en lista: {d}", .{files.len});
+
+    if (files.len == 0) {
+        print("No hay archivos pendientes.", .{});
+        return 0;
+    }
+
+    // Separate DBD and NOR files by ruta
+    var dbd_indices = std.array_list.Managed(usize).init(allocator);
+    defer dbd_indices.deinit();
+    var nor_indices = std.array_list.Managed(usize).init(allocator);
+    defer nor_indices.deinit();
+
+    for (files, 0..) |file, idx| {
+        if (isDbd(file.ruta)) {
+            try dbd_indices.append(idx);
+        } else if (isNor(file.ruta)) {
+            try nor_indices.append(idx);
+        }
+    }
+
+    const has_dbd = dbd_indices.items.len > 0;
+    const has_nor = nor_indices.items.len > 0;
+
+    if (!has_dbd and !has_nor) {
+        print("No hay archivos DBD ni NOR.", .{});
+        return 0;
+    }
+
+    // Ask user to select file group
+    print("", .{});
+    print("Tipo de archivos:", .{});
+    if (has_dbd) print("[1] DBD ({d} archivos)", .{dbd_indices.items.len});
+    if (has_nor) print("[2] NOR ({d} archivos)", .{nor_indices.items.len});
+
+    var selected = std.array_list.Managed(usize).init(allocator);
+    defer selected.deinit();
+    var sel_name: []const u8 = undefined;
+
+    const mode_choice = menuChoice("Seleccione [1]: ", 10, '1');
+    switch (mode_choice) {
+        '2' => {
+            if (has_nor) {
+                for (nor_indices.items) |idx| try selected.append(idx);
+                sel_name = "NOR";
+            } else {
+                for (dbd_indices.items) |idx| try selected.append(idx);
+                sel_name = "DBD";
+            }
+        },
+        else => {
+            if (has_dbd) {
+                for (dbd_indices.items) |idx| try selected.append(idx);
+                sel_name = "DBD";
+            } else {
+                for (nor_indices.items) |idx| try selected.append(idx);
+                sel_name = "NOR";
+            }
+        },
+    }
+
+    return processFiles(client, allocator, config, files, selected.items, sel_name);
 }
