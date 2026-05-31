@@ -597,6 +597,53 @@ fn menuChoice(prompt: []const u8, timeout_sec: i64, default: u8) u8 {
     return default;
 }
 
+fn readMenuLine(prompt: []const u8, timeout_sec: i64, default: []const u8, buf: []u8) []const u8 {
+    _ = extern_fns.fwrite(prompt.ptr, 1, prompt.len, stdout());
+    _ = extern_fns.fflush(stderr());
+    const deadline = extern_fns.time(null) + timeout_sec;
+    while (extern_fns.time(null) < deadline) {
+        if (extern_fns._kbhit() != 0) {
+            // Read first char
+            const first: u8 = @intCast(extern_fns._getch());
+            if (first == '\r' or first == '\n') {
+                return default;
+            }
+            const up = toUpper(first);
+            // If it's a letter, process immediately
+            if (up == 'T' or up == 'F' or up == 'B' or up == 'S') {
+                buf[0] = up;
+                return buf[0..1];
+            }
+            // It's a digit (or anything else) — collect number
+            var pos: usize = 0;
+            buf[pos] = first;
+            pos += 1;
+            // Print the first digit
+            _ = extern_fns.fwrite(&first, 1, 1, stdout());
+            // Poll for more digits with short timeout
+            const digit_deadline = extern_fns.time(null) + 1;
+            while (pos < buf.len and extern_fns.time(null) < digit_deadline) {
+                if (extern_fns._kbhit() != 0) {
+                    const next: u8 = @intCast(extern_fns._getch());
+                    if (next < '0' or next > '9') {
+                        // Not a digit, but we consumed it — ignore and stop
+                        break;
+                    }
+                    buf[pos] = next;
+                    pos += 1;
+                    _ = extern_fns.fwrite(&next, 1, 1, stdout());
+                }
+            }
+            // Echo newline
+            _ = extern_fns.fwrite("\n", 1, 1, stdout());
+            _ = extern_fns.fflush(stdout());
+            return buf[0..pos];
+        }
+    }
+    // Timeout — return default
+    return default;
+}
+
 fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, ruta: []const u8, file_br: []const u8, max_retries: u5) ![]u8 {
     var i: u5 = 0;
     while (i < max_retries) : (i += 1) {
@@ -837,47 +884,36 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
         }
     }
 
-    // Show menu with numbered files and status
-    print("", .{});
-    for (indices, 0..) |idx, i| {
-        const file = &files[idx];
-        const status: u8 = status: {
-            for (eq_indices.items) |ti| if (ti == idx) break :status '=';
-            for (old_indices.items) |ti| if (ti == idx) break :status '-';
-            break :status '+';
-        };
-        if (file.ruta.len > 0) {
-            print("[{d}] {c} {s}/{s}", .{ i + 1, status, file.ruta, file.nombre });
-        } else {
-            print("[{d}] {c} {s}", .{ i + 1, status, file.nombre });
-        }
-    }
-    print("", .{});
-
-    const menu_prompt = if (has_dbd)
-        "[t]odos, [f]altantes, [b]linde, [s]alir [f]: "
-    else
-        "[t]odos, [f]altantes, [s]alir [f]: ";
-    const choice = menuChoice(menu_prompt, 10, 'F');
-
     var fail_count: u32 = 0;
 
-    switch (choice) {
-        'S' => {
-            return 0;
-        },
-        'B', 'b' => {
-            return 2;
-        },
-        'T' => {
-            for (indices, 1..) |idx, i| {
-                printInline("[{d}/{d}] {s} ... ", .{ i, indices.len, files[idx].nombre });
-                processFile(client, allocator, config, &files[idx], &summary_lines, true) catch {
-                    fail_count += 1;
-                };
+    const menu_prompt = if (has_dbd)
+        "Numero, [t]odos, [f]altantes, [b]linde, [s]alir [f]: "
+    else
+        "Numero, [t]odos, [f]altantes, [s]alir [f]: ";
+
+    while (true) {
+        // Show file list each time before prompt
+        print("", .{});
+        for (indices, 0..) |idx, i| {
+            const file = &files[idx];
+            const status: u8 = status: {
+                for (eq_indices.items) |ti| if (ti == idx) break :status '=';
+                for (old_indices.items) |ti| if (ti == idx) break :status '-';
+                break :status '+';
+            };
+            if (file.ruta.len > 0) {
+                print("[{d}] {c} {s}/{s}", .{ i + 1, status, file.ruta, file.nombre });
+            } else {
+                print("[{d}] {c} {s}", .{ i + 1, status, file.nombre });
             }
-        },
-        else => {
+        }
+        print("", .{});
+
+        var line_buf: [16]u8 = undefined;
+        const line = readMenuLine(menu_prompt, 10, "f", &line_buf);
+
+        if (line.len == 0) {
+            // default: faltantes
             {
                 var skip_names = std.array_list.Managed([]const u8).init(allocator);
                 defer skip_names.deinit();
@@ -886,19 +922,72 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
                     debug("  [!] Error reportando skips batch: {s}", .{@errorName(err)});
                 };
             }
-
             var falta_indices = std.array_list.Managed(usize).init(allocator);
             defer falta_indices.deinit();
             try falta_indices.appendSlice(new_indices.items);
             try falta_indices.appendSlice(old_indices.items);
-
             for (falta_indices.items, 1..) |idx, i| {
                 printInline("[{d}/{d}] {s} ... ", .{ i, falta_indices.items.len, files[idx].nombre });
                 processFile(client, allocator, config, &files[idx], &summary_lines, false) catch {
                     fail_count += 1;
                 };
             }
-        },
+            break;
+        }
+
+        const first = toUpper(line[0]);
+        if (first == 'S') {
+            return 0;
+        }
+        if (first == 'B') {
+            return 2;
+        }
+        if (first == 'T') {
+            for (indices, 1..) |idx, i| {
+                printInline("[{d}/{d}] {s} ... ", .{ i, indices.len, files[idx].nombre });
+                processFile(client, allocator, config, &files[idx], &summary_lines, true) catch {
+                    fail_count += 1;
+                };
+            }
+            break;
+        }
+        if (first == 'F') {
+            {
+                var skip_names = std.array_list.Managed([]const u8).init(allocator);
+                defer skip_names.deinit();
+                for (eq_indices.items) |idx| try skip_names.append(files[idx].nombre);
+                confirmBatch(client, allocator, config, skip_names.items) catch |err| {
+                    debug("  [!] Error reportando skips batch: {s}", .{@errorName(err)});
+                };
+            }
+            var falta_indices = std.array_list.Managed(usize).init(allocator);
+            defer falta_indices.deinit();
+            try falta_indices.appendSlice(new_indices.items);
+            try falta_indices.appendSlice(old_indices.items);
+            for (falta_indices.items, 1..) |idx, i| {
+                printInline("[{d}/{d}] {s} ... ", .{ i, falta_indices.items.len, files[idx].nombre });
+                processFile(client, allocator, config, &files[idx], &summary_lines, false) catch {
+                    fail_count += 1;
+                };
+            }
+            break;
+        }
+        // Try to parse as number
+        const num = std.fmt.parseInt(usize, line, 10) catch {
+            print("Opcion invalida.", .{});
+            // Return to menu
+            continue;
+        };
+        if (num < 1 or num > indices.len) {
+            print("Numero invalido (1-{d}).", .{indices.len});
+            continue;
+        }
+        const idx = indices[num - 1];
+        printInline("[1/1] {s} ... ", .{files[idx].nombre});
+        processFile(client, allocator, config, &files[idx], &summary_lines, false) catch {
+            fail_count += 1;
+        };
+        // Continue loop to show menu again
     }
 
     const elapsed = extern_fns.time(null) - t0;
