@@ -500,40 +500,33 @@ fn parseTimestampEpoch(ts: []const u8) i64 {
     return seconds;
 }
 
-fn computeAge(ts: []const u8) [8]u8 {
-    var result: [8]u8 = [8]u8{ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' };
-    if (ts.len == 0) {
-        result[3] = '-';
-        return result;
-    }
+var g_age_buf: [16]u8 = undefined;
+
+fn computeAge(ts: []const u8) []const u8 {
+    if (ts.len == 0) return "-";
 
     const ts_epoch = parseTimestampEpoch(ts);
-    if (ts_epoch == 0) {
-        result[3] = '-';
-        return result;
-    }
+    if (ts_epoch == 0) return "-";
 
     const now = extern_fns.time(null);
     const diff = now - ts_epoch;
-    if (diff < 0) return result;
+    if (diff < 0) return "-";
 
     const days = @divTrunc(diff, 86400);
     const years = @divTrunc(days, 365);
     const hours = @divTrunc(diff, 3600);
     const minutes = @divTrunc(diff, 60);
 
-    var buf: [16]u8 = undefined;
     const s = if (years >= 1)
-        std.fmt.bufPrint(&buf, "{d}a+", .{years}) catch return result
+        std.fmt.bufPrint(&g_age_buf, "{d}a+", .{years}) catch return "-"
     else if (days >= 1)
-        std.fmt.bufPrint(&buf, "{d}d+", .{days}) catch return result
+        std.fmt.bufPrint(&g_age_buf, "{d}d+", .{days}) catch return "-"
     else if (hours >= 1)
-        std.fmt.bufPrint(&buf, "{d}h+", .{hours}) catch return result
+        std.fmt.bufPrint(&g_age_buf, "{d}h+", .{hours}) catch return "-"
     else
-        std.fmt.bufPrint(&buf, "{d}m+", .{minutes + 1}) catch return result;
+        std.fmt.bufPrint(&g_age_buf, "{d}m+", .{minutes + 1}) catch return "-";
 
-    for (s[0..@min(s.len, 8)], 0..) |c, i| result[i] = c;
-    return result;
+    return s;
 }
 
 fn decompressBrotli(input: []const u8, allocator: Allocator) ![]u8 {
