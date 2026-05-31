@@ -826,8 +826,12 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
             }
             break :blk false;
         };
-        const status = if (tiene) "tiene" else "falta";
-        print("[{d}] {s} - [{s}]", .{ i + 1, file.nombre, status });
+        const mark: u8 = if (tiene) 'V' else 'X';
+        if (file.ruta.len > 0) {
+            print("[{d}] {c} {s}/{s}", .{ i + 1, mark, file.ruta, file.nombre });
+        } else {
+            print("[{d}] {c} {s}", .{ i + 1, mark, file.nombre });
+        }
     }
     print("", .{});
 
