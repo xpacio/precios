@@ -902,9 +902,9 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
                 break :status '+';
             };
             if (file.ruta.len > 0) {
-                print("[{d}] {c} {s}/{s}", .{ i + 1, status, file.ruta, file.nombre });
+                print("[{d}] {c} {s} {s}/{s}", .{ i + 1, status, file.fecha_archivo, file.ruta, file.nombre });
             } else {
-                print("[{d}] {c} {s}", .{ i + 1, status, file.nombre });
+                print("[{d}] {c} {s} {s}", .{ i + 1, status, file.fecha_archivo, file.nombre });
             }
         }
         print("", .{});
