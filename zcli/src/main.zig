@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 
 const has_brotli = true;
 
+var g_verbose: bool = false;
+
 const cc = std.builtin.CallingConvention.c;
 
 const Stat64 = extern struct {
@@ -78,6 +80,7 @@ fn printInline(comptime fmt: []const u8, args: anytype) void {
 
 
 fn debug(comptime fmt: []const u8, args: anytype) void {
+    if (!g_verbose) return;
     var buf: [4096]u8 = undefined;
     const msg = std.fmt.bufPrint(&buf, fmt, args) catch "(debug error)";
     _ = extern_fns.fwrite(msg.ptr, 1, msg.len, stderr());
@@ -86,6 +89,7 @@ fn debug(comptime fmt: []const u8, args: anytype) void {
 }
 
 fn debugInline(comptime fmt: []const u8, args: anytype) void {
+    if (!g_verbose) return;
     var buf: [4096]u8 = undefined;
     const msg = std.fmt.bufPrint(&buf, fmt, args) catch "(debug error)";
     _ = extern_fns.fwrite(msg.ptr, 1, msg.len, stderr());
@@ -101,6 +105,13 @@ pub fn main(init: std.process.Init.Minimal) !u8 {
 
     const args_slice = try std.process.Args.toSlice(init.args, allocator);
     defer allocator.free(args_slice);
+
+    for (args_slice) |arg| {
+        if (std.mem.eql(u8, arg, "-v")) {
+            g_verbose = true;
+        }
+    }
+
     debug("zcli iniciado, args={any}", .{args_slice});
 
     debug("Inicializando Io.Threaded...", .{});
