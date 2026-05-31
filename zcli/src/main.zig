@@ -552,6 +552,19 @@ fn promptWithTimeout(prompt: []const u8, timeout_sec: i64) bool {
     return false;
 }
 
+fn menuChoice(prompt: []const u8, timeout_sec: i64, default: u8) u8 {
+    _ = extern_fns.fwrite(prompt.ptr, 1, prompt.len, stderr());
+    _ = extern_fns.fflush(stderr());
+    const deadline = extern_fns.time(null) + timeout_sec;
+    while (extern_fns.time(null) < deadline) {
+        if (extern_fns._kbhit() != 0) {
+            const ch: u8 = @intCast(extern_fns._getch());
+            return toUpper(ch);
+        }
+    }
+    return default;
+}
+
 fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, file_br: []const u8, max_retries: u5) ![]u8 {
     var i: u5 = 0;
     while (i < max_retries) : (i += 1) {
@@ -579,7 +592,7 @@ fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: 
     return error.BrHashMismatch;
 }
 
-fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Config, file: *const PendingFile, summary_lines: *std.array_list.Managed([]u8)) !void {
+fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Config, file: *const PendingFile, summary_lines: *std.array_list.Managed([]u8), force_download: bool) !void {
     const output_name = if (std.mem.endsWith(u8, file.nombre, ".br"))
         file.nombre[0 .. file.nombre.len - 3]
     else
@@ -625,32 +638,34 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         }
     }
 
-    if (local_data) |ld| {
-        const local_hash = computeShortHash(ld);
-        if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
-            try confirmDownload(client, allocator, config, file.nombre, "skip");
-            const age = computeAge(file.fecha_archivo);
-            const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} ({s})", .{
-                file.flat, file.br, origin_path, age,
-            });
-            try summary_lines.append(line);
-            debug("{s}", .{line});
-            return;
-        }
-        const local_mtime = getFileMtime(output_path_z);
-        const server_epoch = parseTimestampEpoch(file.fecha_archivo);
-        if (server_epoch > 0 and local_mtime > 0 and local_mtime > server_epoch) {
-            const answer = promptWithTimeout("  Local mas reciente. Sobrescribir? (s/N): ", 4);
-            if (!answer) {
+    if (!force_download) {
+        if (local_data) |ld| {
+            const local_hash = computeShortHash(ld);
+            if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
                 try confirmDownload(client, allocator, config, file.nombre, "skip");
                 const age = computeAge(file.fecha_archivo);
-                const comp_pct = @as(f64, @floatFromInt(data.len)) / @as(f64, @floatFromInt(decompressed.len)) * 100;
-                const line = try std.fmt.allocPrint(allocator, "[-] {s} {s} {s} ({s}) {d:.0}%", .{
-                    file.flat, file.br, origin_path, age, comp_pct,
+                const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} ({s})", .{
+                    file.flat, file.br, origin_path, age,
                 });
                 try summary_lines.append(line);
                 debug("{s}", .{line});
                 return;
+            }
+            const local_mtime = getFileMtime(output_path_z);
+            const server_epoch = parseTimestampEpoch(file.fecha_archivo);
+            if (server_epoch > 0 and local_mtime > 0 and local_mtime > server_epoch) {
+                const answer = promptWithTimeout("  Local mas reciente. Sobrescribir? (s/N): ", 4);
+                if (!answer) {
+                    try confirmDownload(client, allocator, config, file.nombre, "skip");
+                    const age = computeAge(file.fecha_archivo);
+                    const comp_pct = @as(f64, @floatFromInt(data.len)) / @as(f64, @floatFromInt(decompressed.len)) * 100;
+                    const line = try std.fmt.allocPrint(allocator, "[-] {s} {s} {s} ({s}) {d:.0}%", .{
+                        file.flat, file.br, origin_path, age, comp_pct,
+                    });
+                    try summary_lines.append(line);
+                    debug("{s}", .{line});
+                    return;
+                }
             }
         }
     }
@@ -741,11 +756,11 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
         summary_lines.deinit();
     }
 
-    // Phase 1: Pre-analysis — scan all local files
-    var skip_indices = std.array_list.Managed(usize).init(allocator);
-    defer skip_indices.deinit();
-    var pending_indices = std.array_list.Managed(usize).init(allocator);
-    defer pending_indices.deinit();
+    // Pre-analysis: determine which files already match locally
+    var tiene_indices = std.array_list.Managed(usize).init(allocator);
+    defer tiene_indices.deinit();
+    var falta_indices = std.array_list.Managed(usize).init(allocator);
+    defer falta_indices.deinit();
 
     for (files, 0..) |file, idx| {
         const output_name = if (std.mem.endsWith(u8, file.nombre, ".br"))
@@ -760,40 +775,63 @@ fn runSync(client: *std.http.Client, allocator: Allocator, config: *const Config
             defer allocator.free(ld);
             const local_hash = computeShortHash(ld);
             if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
-                try skip_indices.append(idx);
-                const origin_path = if (file.ruta.len > 0)
-                    try std.fmt.allocPrint(allocator, "{s}/{s}", .{ file.ruta, output_name })
-                else
-                    try allocator.dupe(u8, output_name);
-                defer allocator.free(origin_path);
-                const age = computeAge(file.fecha_archivo);
-                const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} ({s})", .{
-                    file.flat, file.br, origin_path, age,
-                });
-                try summary_lines.append(line);
+                try tiene_indices.append(idx);
                 continue;
             }
         }
-        try pending_indices.append(idx);
+        try falta_indices.append(idx);
     }
 
-    // Phase 2: Batch report all skips in one HTTP call
-    {
-        var skip_names = std.array_list.Managed([]const u8).init(allocator);
-        defer skip_names.deinit();
-        for (skip_indices.items) |idx| try skip_names.append(files[idx].nombre);
-        confirmBatch(client, allocator, config, skip_names.items) catch |err| {
-            debug("  [!] Error reportando skips batch: {s}", .{@errorName(err)});
+    // Show menu with numbered files and status
+    debug("", .{});
+    for (files, 0..) |file, idx| {
+        const tiene = blk: {
+            for (tiene_indices.items) |ti| {
+                if (ti == idx) break :blk true;
+            }
+            break :blk false;
         };
+        const status = if (tiene) "tiene" else "falta";
+        debug("[{d}] {s} - [{s}]", .{ idx + 1, file.nombre, status });
     }
+    debug("", .{});
 
-    // Phase 3: Download and process only pending files
+    const choice = menuChoice("[t]odos, [d]istintos, des[b]linde, [s]alir [d]: ", 10, 'D');
+
     var fail_count: u32 = 0;
-    for (pending_indices.items, 1..) |idx, i| {
-        debugInline("[{d}/{d}] {s} ... ", .{ i, pending_indices.items.len, files[idx].nombre });
-        processFile(client, allocator, config, &files[idx], &summary_lines) catch {
-            fail_count += 1;
-        };
+
+    switch (choice) {
+        'S' => {
+            return 0;
+        },
+        'B' => {
+            return 0;
+        },
+        'T' => {
+            for (0..files.len, 1..) |idx, i| {
+                debugInline("[{d}/{d}] {s} ... ", .{ i, files.len, files[idx].nombre });
+                processFile(client, allocator, config, &files[idx], &summary_lines, true) catch {
+                    fail_count += 1;
+                };
+            }
+        },
+        else => {
+            {
+                var skip_names = std.array_list.Managed([]const u8).init(allocator);
+                defer skip_names.deinit();
+                for (tiene_indices.items) |idx| try skip_names.append(files[idx].nombre);
+                confirmBatch(client, allocator, config, skip_names.items) catch |err| {
+                    debug("  [!] Error reportando skips batch: {s}", .{@errorName(err)});
+                };
+            }
+
+            for (falta_indices.items, 1..) |idx, i| {
+                debugInline("[{d}/{d}] {s} ... ", .{ i, falta_indices.items.len, files[idx].nombre });
+                processFile(client, allocator, config, &files[idx], &summary_lines, false) catch {
+                    fail_count += 1;
+                };
+            }
+        },
     }
 
     const elapsed = extern_fns.time(null) - t0;
