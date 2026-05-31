@@ -800,11 +800,13 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
         return 0;
     }
 
-    // Pre-analysis: determine which files already match locally
-    var tiene_indices = std.array_list.Managed(usize).init(allocator);
-    defer tiene_indices.deinit();
-    var falta_indices = std.array_list.Managed(usize).init(allocator);
-    defer falta_indices.deinit();
+    // Pre-analysis: determine file status
+    var eq_indices = std.array_list.Managed(usize).init(allocator);
+    defer eq_indices.deinit();
+    var new_indices = std.array_list.Managed(usize).init(allocator);
+    defer new_indices.deinit();
+    var old_indices = std.array_list.Managed(usize).init(allocator);
+    defer old_indices.deinit();
 
     for (indices) |idx| {
         const file = &files[idx];
@@ -820,28 +822,34 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
             defer allocator.free(ld);
             const local_hash = computeShortHash(ld);
             if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
-                try tiene_indices.append(idx);
+                try eq_indices.append(idx);
                 continue;
             }
+            const local_mtime = getFileMtime(output_z);
+            const server_epoch = parseTimestampEpoch(file.fecha_archivo);
+            if (server_epoch > 0 and local_mtime > 0 and local_mtime > server_epoch) {
+                try old_indices.append(idx);
+            } else {
+                try new_indices.append(idx);
+            }
+        } else {
+            try new_indices.append(idx);
         }
-        try falta_indices.append(idx);
     }
 
     // Show menu with numbered files and status
     print("", .{});
     for (indices, 0..) |idx, i| {
         const file = &files[idx];
-        const tiene = blk: {
-            for (tiene_indices.items) |ti| {
-                if (ti == idx) break :blk true;
-            }
-            break :blk false;
+        const status: u8 = status: {
+            for (eq_indices.items) |ti| if (ti == idx) break :status '=';
+            for (old_indices.items) |ti| if (ti == idx) break :status '-';
+            break :status '+';
         };
-        const mark: u8 = if (tiene) 'V' else 'X';
         if (file.ruta.len > 0) {
-            print("[{d}] {c} {s}/{s}", .{ i + 1, mark, file.ruta, file.nombre });
+            print("[{d}] {c} {s}/{s}", .{ i + 1, status, file.ruta, file.nombre });
         } else {
-            print("[{d}] {c} {s}", .{ i + 1, mark, file.nombre });
+            print("[{d}] {c} {s}", .{ i + 1, status, file.nombre });
         }
     }
     print("", .{});
@@ -873,11 +881,16 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
             {
                 var skip_names = std.array_list.Managed([]const u8).init(allocator);
                 defer skip_names.deinit();
-                for (tiene_indices.items) |idx| try skip_names.append(files[idx].nombre);
+                for (eq_indices.items) |idx| try skip_names.append(files[idx].nombre);
                 confirmBatch(client, allocator, config, skip_names.items) catch |err| {
                     debug("  [!] Error reportando skips batch: {s}", .{@errorName(err)});
                 };
             }
+
+            var falta_indices = std.array_list.Managed(usize).init(allocator);
+            defer falta_indices.deinit();
+            try falta_indices.appendSlice(new_indices.items);
+            try falta_indices.appendSlice(old_indices.items);
 
             for (falta_indices.items, 1..) |idx, i| {
                 printInline("[{d}/{d}] {s} ... ", .{ i, falta_indices.items.len, files[idx].nombre });
