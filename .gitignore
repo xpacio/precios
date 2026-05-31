@@ -1,2 +1,4 @@
 storage/
 *.log
+test_*
+zcli/compat.c
