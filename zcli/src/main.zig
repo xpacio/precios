@@ -605,6 +605,9 @@ fn readMenuLine(prompt: []const u8, timeout_sec: i64, default: []const u8, buf: 
             // If it's a letter, process immediately
             if (up == 'T' or up == 'F' or up == 'B' or up == 'S') {
                 buf[0] = up;
+                _ = extern_fns.fwrite(&first, 1, 1, stdout());
+                _ = extern_fns.fwrite("\n", 1, 1, stdout());
+                _ = extern_fns.fflush(stdout());
                 return buf[0..1];
             }
             // It's a digit (or anything else) — collect number
@@ -989,7 +992,6 @@ fn processFiles(client: *std.http.Client, allocator: Allocator, config: *const C
             continue;
         }
         const idx = indices[num - 1];
-        print("", .{}); // newline after prompt input
         printInline("[1/1] {s} ... ", .{files[idx].nombre});
         if (processFile(client, allocator, config, &files[idx], &summary_lines, false)) {
             statuses[num - 1] = '=';
