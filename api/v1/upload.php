@@ -50,7 +50,7 @@ try {
     $pdo = getDB();
     $pdo->beginTransaction();
 
-    $finalFileName = $hNombre ?? $fileName ?? $file['name'];
+    $finalFileName = strtoupper($hNombre ?? $fileName ?? $file['name']);
 
     $stmt = $pdo->prepare("INSERT INTO archivos (nombre, ruta, peso, flat, br, fecha_carga, n_descargas) VALUES (?, ?, ?, ?, ?, ?, 0) RETURNING id");
     $stmt->execute([

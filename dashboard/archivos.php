@@ -72,8 +72,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'elimi
 
 // === POST: registrar archivo ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'registrar') {
-    $ruta = trim($_POST['ruta'] ?? '');
-    $nombre = trim($_POST['nombre'] ?? '');
+    $ruta = strtoupper(trim($_POST['ruta'] ?? ''));
+    $nombre = strtoupper(trim($_POST['nombre'] ?? ''));
     $isAjax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
 
     $resp = ['status' => 'OK', 'mensaje' => '', 'log' => []];

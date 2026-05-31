@@ -613,17 +613,11 @@ fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: 
 }
 
 fn isDbd(ruta: []const u8) bool {
-    if (ruta.len < 3) return false;
-    var prefix: [3]u8 = undefined;
-    for (ruta[0..3], 0..) |c, i| prefix[i] = toUpper(c);
-    return std.mem.eql(u8, &prefix, "DBD");
+    return std.mem.indexOf(u8, ruta, "DSBLIND") != null;
 }
 
 fn isNor(ruta: []const u8) bool {
-    if (ruta.len < 3) return false;
-    var prefix: [3]u8 = undefined;
-    for (ruta[0..3], 0..) |c, i| prefix[i] = toUpper(c);
-    return std.mem.eql(u8, &prefix, "NOR");
+    return !isDbd(ruta);
 }
 
 fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Config, file: *const PendingFile, summary_lines: *std.array_list.Managed([]u8), force_download: bool) !void {

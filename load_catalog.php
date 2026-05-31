@@ -46,7 +46,7 @@ foreach ($lines as $line) {
 
     $parts = explode('/', $line);
     $nombre = array_pop($parts);
-    $path = implode('/', $parts);
+    $path = strtoupper(implode('/', $parts));
 
     $fullPath = $PRECIOS_DIR . '/' . $line;
     $ausente = !file_exists($fullPath);
