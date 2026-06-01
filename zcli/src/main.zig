@@ -579,23 +579,31 @@ fn getFileMtime(path_z: [:0]const u8) i64 {
 
 fn promptDbdCredentials(allocator: Allocator) void {
     var user_line: []const u8 = "";
-    while (true) {
-        debugInline("Usuario DBD: ", .{});
-        var buf: [64]u8 = undefined;
-        user_line = readLine(&buf) catch continue;
-        if (user_line.len > 0 and !std.mem.eql(u8, user_line, "null"))
-            break;
-        print("  [!] Usuario invalido.", .{});
+    {
+        var attempts: u3 = 0;
+        while (attempts < 3) {
+            debugInline("Usuario DBD: ", .{});
+            var buf: [64]u8 = undefined;
+            user_line = readLine(&buf) catch { attempts += 1; continue; };
+            if (user_line.len > 0 and !std.mem.eql(u8, user_line, "null"))
+                break;
+            print("  [!] Usuario invalido.", .{});
+            attempts += 1;
+        }
     }
 
     var pass_line: []const u8 = "";
-    while (true) {
-        debugInline("Clave DBD: ", .{});
-        var buf: [64]u8 = undefined;
-        pass_line = readLine(&buf) catch continue;
-        if (pass_line.len > 0 and !std.mem.eql(u8, pass_line, "null"))
-            break;
-        print("  [!] Clave invalida.", .{});
+    {
+        var attempts: u3 = 0;
+        while (attempts < 3) {
+            debugInline("Clave DBD: ", .{});
+            var buf: [64]u8 = undefined;
+            pass_line = readLine(&buf) catch { attempts += 1; continue; };
+            if (pass_line.len > 0 and !std.mem.eql(u8, pass_line, "null"))
+                break;
+            print("  [!] Clave invalida.", .{});
+            attempts += 1;
+        }
     }
 
     g_dbd_user = allocator.dupe(u8, user_line) catch return;
@@ -688,10 +696,12 @@ fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: 
         const data = downloadFile(client, allocator, config, nombre, ruta) catch |err| {
             if (i + 1 < max_retries) {
                 debug("  [!] {s} | Error download (intento {}/{}), re-descargando...", .{ nombre, i + 1, max_retries });
-                if (err == error.HttpError and isDbd(ruta) and g_dbd_authed) {
-                    g_dbd_authed = false;
+                if (err == error.HttpError and isDbd(ruta)) {
+                    if (g_dbd_authed) {
+                        g_dbd_authed = false;
+                        print("  [!] Clave DBD incorrecta. Intente de nuevo.", .{});
+                    }
                 }
-                print("  [!] Clave DBD incorrecta. Intente de nuevo.", .{});
                 continue;
             }
             return err;
