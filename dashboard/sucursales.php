@@ -36,28 +36,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 
+    if ($_POST['action'] === 'toggle-sucursal-enabled' && $sucursalId) {
+        header('Content-Type: application/json');
+        $enabled = !empty($_POST['enabled']);
+        try {
+            $pdo->prepare("UPDATE sucursales SET enabled = ? WHERE id_sucursal = ?")
+                ->execute([$enabled ? 't' : 'f', $sucursalId]);
+            echo json_encode(['ok' => true]);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     if ($_POST['action'] === 'editar' && $sucursalId) {
+        header('Content-Type: application/json');
         $nuevoNombre = trim($_POST['nombre_sucursal'] ?? '');
         $enabled = !empty($_POST['enabled']) ? 't' : 'f';
-        if ($nuevoNombre) {
-            try {
-                $pdo->prepare("UPDATE sucursales SET nombre_sucursal = ?, enabled = ? WHERE id_sucursal = ?")
-                    ->execute([$nuevoNombre, $enabled, $sucursalId]);
-                $mensaje = 'Sucursal actualizada.';
-            } catch (Exception $e) {
-                $error = 'Error: ' . $e->getMessage();
-            }
+        if (!$nuevoNombre) {
+            echo json_encode(['ok' => false, 'error' => 'Nombre requerido']);
+            exit;
         }
+        try {
+            $pdo->prepare("UPDATE sucursales SET nombre_sucursal = ?, enabled = ? WHERE id_sucursal = ?")
+                ->execute([$nuevoNombre, $enabled, $sucursalId]);
+            echo json_encode(['ok' => true, 'nombre' => $nuevoNombre]);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
     }
 
     if ($_POST['action'] === 'desasociar' && $sucursalId && $archivoId) {
+        header('Content-Type: application/json');
         try {
             $pdo->prepare("DELETE FROM archivo_sucursal WHERE archivo_id = ? AND sucursal_id = ?")
                 ->execute([$archivoId, $sucursalId]);
-            $mensaje = 'Asociación eliminada';
+            echo json_encode(['ok' => true]);
         } catch (Exception $e) {
-            $error = 'Error: ' . $e->getMessage();
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
+        exit;
     }
 
     if ($_POST['action'] === 'crear') {
@@ -219,12 +238,7 @@ if (($_GET['action'] ?? '') === 'detail') {
                             <td style="text-align:center;"><?= (int)($a['n_envios'] ?? 0) ?></td>
                             <td style="text-align:center;"><?= (int)($a['n_exitos'] ?? 0) ?></td>
                             <td>
-                                <form method="POST" action="/dashboard/sucursales" style="display:inline">
-                                    <input type="hidden" name="action" value="desasociar">
-                                    <input type="hidden" name="sucursal_id" value="<?= htmlspecialchars($sucId) ?>">
-                                    <input type="hidden" name="archivo_id" value="<?= (int)$a['id'] ?>">
-                                    <button type="submit" class="secondary outline" style="padding:0.2rem 0.5rem;font-size:0.8rem">Desasociar</button>
-                                </form>
+                                <button type="button" class="btn-desasociar secondary outline" data-sucursal="<?= htmlspecialchars($sucId) ?>" data-archivo="<?= (int)$a['id'] ?>" style="padding:0.2rem 0.5rem;font-size:0.8rem">Desasociar</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -238,7 +252,7 @@ if (($_GET['action'] ?? '') === 'detail') {
     ob_start();
     ?>
     <article>
-        <form method="POST" action="/dashboard/sucursales" style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap;">
+        <form class="form-editar-ajax" method="POST" action="/dashboard/sucursales" style="display:flex;gap:0.75rem;align-items:end;flex-wrap:wrap;">
             <input type="hidden" name="action" value="editar">
             <input type="hidden" name="sucursal_id" value="<?= htmlspecialchars($sucId) ?>">
             <label style="flex:1;min-width:200px;">
@@ -367,6 +381,77 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(function () { cb.checked = !cb.checked; });
     });
 
+    // === Desasociar (AJAX) ===
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn-desasociar');
+        if (!btn) return;
+        var formData = new FormData();
+        formData.append('action', 'desasociar');
+        formData.append('sucursal_id', btn.dataset.sucursal);
+        formData.append('archivo_id', btn.dataset.archivo);
+        fetch('/dashboard/sucursales', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) { alert(data.error || 'Error'); return; }
+                var tr = btn.closest('tr');
+                if (tr) tr.parentNode.removeChild(tr);
+                var subLink = document.querySelector('.suc-subtabs a[data-tab="suc-' + btn.dataset.sucursal + '-archivos"]');
+                if (subLink) {
+                    var m = subLink.textContent.match(/\((\d+)\)/);
+                    if (m) subLink.textContent = 'Archivos (' + (parseInt(m[1]) - 1) + ')';
+                }
+            })
+            .catch(function () { alert('Error de red'); });
+    });
+
+    // === Editar sucursal (AJAX) ===
+    document.addEventListener('submit', function (e) {
+        var form = e.target.closest('.form-editar-ajax');
+        if (!form) return;
+        e.preventDefault();
+        var formData = new FormData(form);
+        fetch('/dashboard/sucursales', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var oldMsg = form.parentNode.querySelector('.ajax-msg');
+                if (oldMsg) oldMsg.parentNode.removeChild(oldMsg);
+                var msg = document.createElement('div');
+                msg.className = 'ajax-msg';
+                if (!data.ok) {
+                    msg.className += ' flash flash-error';
+                    msg.textContent = data.error || 'Error';
+                } else {
+                    msg.className += ' flash flash-success';
+                    msg.textContent = 'Guardado.';
+                    var sucId = form.querySelector('[name=sucursal_id]').value;
+                    var mainLink = document.querySelector('#sucursales-tabs a[data-tab="suc-' + sucId + '"]');
+                    if (mainLink) {
+                        var parts = mainLink.textContent.split(' — ');
+                        mainLink.textContent = parts[0] + ' — ' + data.nombre;
+                    }
+                    setTimeout(function() { msg.parentNode.removeChild(msg); }, 3000);
+                }
+                form.parentNode.insertBefore(msg, form);
+            })
+            .catch(function () { alert('Error de red'); });
+    });
+
+    // === Toggle sucursal enabled (search results) ===
+    document.addEventListener('change', function (e) {
+        var cb = e.target.closest('.toggle-sucursal-enabled');
+        if (!cb) return;
+        var formData = new FormData();
+        formData.append('action', 'toggle-sucursal-enabled');
+        formData.append('sucursal_id', cb.dataset.sucursal);
+        formData.append('enabled', cb.checked ? '1' : '');
+        fetch('/dashboard/sucursales', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) cb.checked = !cb.checked;
+            })
+            .catch(function () { cb.checked = !cb.checked; });
+    });
+
     // === "Ver" sucursal → dynamic tab ===
     document.addEventListener('click', function (e) {
         var btn = e.target.closest('.ver-sucursal');
@@ -429,7 +514,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<tr>';
             html += '<td><code>' + escapeHtml(s.id_sucursal) + '</code></td>';
             html += '<td>' + escapeHtml(s.nombre_sucursal) + '</td>';
-            html += '<td><span style="color:' + (enabled ? 'green">Activa' : 'red">Inactiva') + '</span></td>';
+            html += '<td style="text-align:center;"><input type="checkbox" class="toggle-sucursal-enabled" data-sucursal="' + escapeHtml(s.id_sucursal) + '"' + (enabled ? ' checked' : '') + '></td>';
             html += '<td>' + s.total_asociados + '</td>';
             html += '<td><a href="#" class="ver-sucursal secondary outline" role="button" data-sucursal="' + escapeHtml(s.id_sucursal) + '" style="padding:0.25rem 0.5rem">Ver</a></td>';
             html += '</tr>';
