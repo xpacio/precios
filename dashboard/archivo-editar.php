@@ -68,6 +68,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggl
     exit;
 }
 
+// === POST: gen-dbd-file (AJAX) ===
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gen-dbd-file' && ($_POST['sucursal_id'] ?? '')) {
+    header('Content-Type: application/json');
+    $sid = $_POST['sucursal_id'];
+    try {
+        $clave = strtoupper(substr(md5(time() . '-' . $sid . '-' . $_SESSION['user_id']), 0, 6));
+        $pdo->prepare("UPDATE archivo_sucursal SET enabled = TRUE WHERE archivo_id = ? AND sucursal_id = ?")
+            ->execute([$id, $sid]);
+        $pdo->prepare("UPDATE sucursales SET clave_dbd = ? WHERE id_sucursal = ?")
+            ->execute([$clave, $sid]);
+        echo json_encode(['ok' => true, 'clave_dbd' => $clave]);
+    } catch (Exception $e) {
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // === POST: toggle sync (AJAX) ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggle-sync' && ($_POST['sucursal_id'] ?? '')) {
     header('Content-Type: application/json');
@@ -226,7 +243,10 @@ require __DIR__ . '/header.php';
                         <td><?= htmlspecialchars($s['nombre_sucursal']) ?></td>
                         <td><input type="checkbox" class="toggle-enabled" data-id="<?= htmlspecialchars($s['id_sucursal']) ?>"<?= $activo ? ' checked' : '' ?>></td>
                         <td><input type="checkbox" class="toggle-sync" data-id="<?= htmlspecialchars($s['id_sucursal']) ?>"<?= ($s['sync'] === 't' || $s['sync'] === true) ? ' checked' : '' ?>></td>
-                        <td>
+                        <td style="white-space:nowrap">
+                            <?php if (strpos($arch['ruta'], 'DSBLIND') !== false): ?>
+                            <button class="gen-dbd-file secondary outline" data-sucursal="<?= htmlspecialchars($s['id_sucursal']) ?>" style="padding:0.2rem 0.5rem;font-size:0.8rem">DBD</button>
+                            <?php endif; ?>
                             <form method="POST" style="display:inline">
                                 <input type="hidden" name="action" value="desasociar">
                                 <input type="hidden" name="sucursal_id" value="<?= htmlspecialchars($s['id_sucursal']) ?>">
@@ -306,6 +326,31 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     document.querySelectorAll('.toggle-enabled').forEach(function (cb) {
         cb.addEventListener('change', function () { toggleField('toggle-enabled', this); });
+    });
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.gen-dbd-file');
+        if (!btn) return;
+        e.preventDefault();
+        var sucId = btn.dataset.sucursal;
+        var formData = new FormData();
+        formData.append('action', 'gen-dbd-file');
+        formData.append('sucursal_id', sucId);
+        fetch('/dashboard/archivo-editar?id=<?= $id ?>', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.ok) {
+                    var flash = document.createElement('div');
+                    flash.className = 'flash flash-success';
+                    flash.textContent = 'Clave DBD: ' + data.clave_dbd;
+                    var article = document.querySelector('article');
+                    article.parentNode.insertBefore(flash, article);
+                    setTimeout(function () { flash.remove(); }, 8000);
+                } else {
+                    alert('Error: ' + (data.error || 'desconocido'));
+                }
+            })
+            .catch(function () { alert('Error de red al generar clave DBD'); });
     });
 
     document.getElementById('btnSyncOne').addEventListener('click', function () {

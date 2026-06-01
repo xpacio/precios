@@ -62,6 +62,34 @@ try {
     $pdo->prepare("UPDATE archivo_sucursal SET n_envios    = n_envios    + 1       WHERE archivo_id = ? AND sucursal_id = ?")->execute([$file['id'], $sucursalId]);
 
     $fileType = strpos($file['ruta'], 'DSBLIND') !== false ? 'DBD' : 'NOR';
+
+    if ($fileType === 'DBD') {
+        $dbdUser = $_SERVER['HTTP_X_DBD_USER'] ?? '';
+        $dbdPass = $_SERVER['HTTP_X_DBD_PASSWORD'] ?? '';
+
+        if ($dbdUser === 'GTE') {
+            $stmtS = $pdo->prepare("SELECT clave_dbd FROM sucursales WHERE id_sucursal = ?");
+            $stmtS->execute([$sucursalId]);
+            $suc = $stmtS->fetch();
+            if (!$suc || $suc['clave_dbd'] === null || $suc['clave_dbd'] !== $dbdPass) {
+                http_response_code(403);
+                header('Content-Type: text/plain');
+                echo "ERROR: Clave DBD incorrecta.";
+                exit;
+            }
+        } else {
+            $stmtU = $pdo->prepare("SELECT id, password FROM usuarios WHERE nickname = ? AND enabled = TRUE AND can_dsblind = TRUE");
+            $stmtU->execute([$dbdUser]);
+            $user = $stmtU->fetch();
+            if (!$user || !password_verify($dbdPass, $user['password'])) {
+                http_response_code(403);
+                header('Content-Type: text/plain');
+                echo "ERROR: Usuario o clave incorrecta.";
+                exit;
+            }
+        }
+    }
+
     $stmt = $pdo->prepare("INSERT INTO cli_log (sucursal_id, file_name, file_type, api_key_id, ip_address) VALUES (?, ?, ?, ?, ?)");
     $stmt->execute([$sucursalId, $file['nombre'], $fileType, $GLOBALS['_api_key_id'] ?? null, $_SERVER['REMOTE_ADDR'] ?? '']);
 

@@ -5,6 +5,9 @@ const Allocator = std.mem.Allocator;
 const has_brotli = true;
 
 var g_verbose: bool = false;
+var g_dbd_user: []u8 = "";
+var g_dbd_pass: []u8 = "";
+var g_dbd_authed: bool = false;
 
 const cc = std.builtin.CallingConvention.c;
 
@@ -340,7 +343,17 @@ fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const C
 
     const auth = httpHeader("X-API-Key", config.api_key);
     const ruta_hdr = httpHeader("X-Ruta", ruta);
-    const headers = [_]std.http.Header{ auth, ruta_hdr };
+    var extra_headers: [4]std.http.Header = undefined;
+    extra_headers[0] = auth;
+    extra_headers[1] = ruta_hdr;
+    var header_count: usize = 2;
+
+    if (isDbd(ruta) and g_dbd_authed) {
+        extra_headers[2] = httpHeader("X-DBD-User", g_dbd_user);
+        extra_headers[3] = httpHeader("X-DBD-Password", g_dbd_pass);
+        header_count = 4;
+    }
+
     var redirect_buf: [4096]u8 = undefined;
     var response_buf: [10485760]u8 = undefined;
     var fw = std.Io.Writer.fixed(&response_buf);
@@ -348,7 +361,7 @@ fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const C
     debug("  downloadFile: GET {s}", .{url});
     const result = client.fetch(.{
         .location = .{ .url = url },
-        .extra_headers = &headers,
+        .extra_headers = extra_headers[0..header_count],
         .redirect_buffer = &redirect_buf,
         .response_writer = &fw,
     }) catch |err| {
@@ -564,6 +577,28 @@ fn getFileMtime(path_z: [:0]const u8) i64 {
     return st.st_mtime;
 }
 
+fn promptDbdCredentials(allocator: Allocator) void {
+    debugInline("Usuario DBD: ", .{});
+    var user_buf: [64]u8 = undefined;
+    const user_line = readLine(&user_buf) catch {
+        debug("Error leyendo usuario DBD", .{});
+        return;
+    };
+    if (user_line.len == 0) return;
+
+    debugInline("Clave DBD: ", .{});
+    var pass_buf: [64]u8 = undefined;
+    const pass_line = readLine(&pass_buf) catch {
+        debug("Error leyendo clave DBD", .{});
+        return;
+    };
+    if (pass_line.len == 0) return;
+
+    g_dbd_user = allocator.dupe(u8, user_line) catch return;
+    g_dbd_pass = allocator.dupe(u8, pass_line) catch return;
+    g_dbd_authed = true;
+}
+
 fn promptWithTimeout(prompt: []const u8, timeout_sec: i64) bool {
     _ = extern_fns.fwrite(prompt.ptr, 1, prompt.len, stdout());
     _ = extern_fns.fflush(stderr());
@@ -643,9 +678,16 @@ fn readMenuLine(prompt: []const u8, timeout_sec: i64, default: []const u8, buf: 
 fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, ruta: []const u8, file_br: []const u8, max_retries: u5) ![]u8 {
     var i: u5 = 0;
     while (i < max_retries) : (i += 1) {
+        if (isDbd(ruta) and !g_dbd_authed) {
+            promptDbdCredentials(allocator);
+        }
         const data = downloadFile(client, allocator, config, nombre, ruta) catch |err| {
             if (i + 1 < max_retries) {
                 debug("  [!] {s} | Error download (intento {}/{}), re-descargando...", .{ nombre, i + 1, max_retries });
+                if (err == error.HttpError and isDbd(ruta) and g_dbd_authed) {
+                    g_dbd_authed = false;
+                }
+                print("  [!] Clave DBD incorrecta. Intente de nuevo.", .{});
                 continue;
             }
             return err;
@@ -806,6 +848,9 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 }
 
 fn downloadGroup(client: *std.http.Client, allocator: Allocator, config: *const Config, files: []PendingFile, indices: []const usize, group_name: []const u8) u8 {
+    if (!g_dbd_authed) {
+        promptDbdCredentials(allocator);
+    }
     const t0 = extern_fns.time(null);
     var fail_count: u32 = 0;
     for (indices, 1..) |idx, i| {

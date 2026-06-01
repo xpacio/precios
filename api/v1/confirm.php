@@ -40,12 +40,27 @@ try {
 
         $pdo->beginTransaction();
         $count = 0;
+        $hasDbd = false;
         foreach ($batch as $item) {
             $n = $item['nombre'] ?? null;
             $r = $item['resultado'] ?? 'skip';
             if (!$n || !in_array($r, $validResults, true)) continue;
             $stmt->execute([$r, $r, $sucursalId, $n]);
+            if ($r === 'downloaded') {
+                $stmtT = $pdo->prepare("SELECT es_desblinde FROM archivo_sucursal WHERE sucursal_id = ? AND nombre = ?");
+                $stmtT->execute([$sucursalId, $n]);
+                $rowT = $stmtT->fetch();
+                if ($rowT && ($rowT['es_desblinde'] === 't' || $rowT['es_desblinde'] === true)) {
+                    $pdo->prepare("UPDATE archivo_sucursal SET enabled = FALSE WHERE sucursal_id = ? AND nombre = ?")
+                        ->execute([$sucursalId, $n]);
+                    $hasDbd = true;
+                }
+            }
             $count++;
+        }
+        if ($hasDbd) {
+            $pdo->prepare("UPDATE sucursales SET clave_dbd = NULL WHERE id_sucursal = ?")
+                ->execute([$sucursalId]);
         }
         $pdo->commit();
 
@@ -80,6 +95,18 @@ try {
         http_response_code(404);
         echo "ERROR: No se encontró asociación para {$sucursalId}/{$archivoNombre}";
         exit;
+    }
+
+    if ($resultado === 'downloaded') {
+        $stmtT = $pdo->prepare("SELECT es_desblinde FROM archivo_sucursal WHERE sucursal_id = ? AND nombre = ?");
+        $stmtT->execute([$sucursalId, $archivoNombre]);
+        $rowT = $stmtT->fetch();
+        if ($rowT && ($rowT['es_desblinde'] === 't' || $rowT['es_desblinde'] === true)) {
+            $pdo->prepare("UPDATE archivo_sucursal SET enabled = FALSE WHERE sucursal_id = ? AND nombre = ?")
+                ->execute([$sucursalId, $archivoNombre]);
+            $pdo->prepare("UPDATE sucursales SET clave_dbd = NULL WHERE id_sucursal = ?")
+                ->execute([$sucursalId]);
+        }
     }
 
     echo "STATUS: OK\n";

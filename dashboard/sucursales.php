@@ -49,6 +49,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 
+    if ($_POST['action'] === 'gen-dbd-suc' && $sucursalId) {
+        header('Content-Type: application/json');
+        try {
+            $clave = strtoupper(substr(md5(time() . '-' . $sucursalId . '-' . $_SESSION['user_id']), 0, 6));
+            $pdo->prepare("UPDATE archivo_sucursal SET enabled = TRUE WHERE sucursal_id = ? AND es_desblinde = TRUE")
+                ->execute([$sucursalId]);
+            $pdo->prepare("UPDATE sucursales SET clave_dbd = ? WHERE id_sucursal = ?")
+                ->execute([$clave, $sucursalId]);
+            echo json_encode(['ok' => true, 'clave_dbd' => $clave, 'sucursal_id' => $sucursalId]);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     if ($_POST['action'] === 'editar' && $sucursalId) {
         header('Content-Type: application/json');
         $nuevoNombre = trim($_POST['nombre_sucursal'] ?? '');
@@ -496,6 +511,27 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(function () { alert('Error de red al cargar sucursal'); });
     });
 
+    // === Gen DBD Suc (habilitar todos DSBLIND + generar clave) ===
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.gen-dbd-suc');
+        if (!btn) return;
+        e.preventDefault();
+        var sucId = btn.dataset.sucursal;
+        var formData = new FormData();
+        formData.append('action', 'gen-dbd-suc');
+        formData.append('sucursal_id', sucId);
+        fetch('/dashboard/sucursales', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.ok) {
+                    alert('Clave DBD generada para sucursal ' + sucId + ': ' + data.clave_dbd);
+                } else {
+                    alert('Error: ' + (data.error || 'desconocido'));
+                }
+            })
+            .catch(function () { alert('Error de red al generar clave DBD'); });
+    });
+
     // === Search ===
     var input = document.getElementById('q');
     var results = document.getElementById('sucursales-results');
@@ -516,7 +552,8 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<td>' + escapeHtml(s.nombre_sucursal) + '</td>';
             html += '<td style="text-align:center;"><input type="checkbox" class="toggle-sucursal-enabled" data-sucursal="' + escapeHtml(s.id_sucursal) + '"' + (enabled ? ' checked' : '') + '></td>';
             html += '<td>' + s.total_asociados + '</td>';
-            html += '<td><a href="#" class="ver-sucursal secondary outline" role="button" data-sucursal="' + escapeHtml(s.id_sucursal) + '" style="padding:0.25rem 0.5rem">Ver</a></td>';
+            html += '<td style="white-space:nowrap"><a href="#" class="ver-sucursal secondary outline" role="button" data-sucursal="' + escapeHtml(s.id_sucursal) + '" style="padding:0.25rem 0.5rem">Ver</a> ';
+            html += '<button class="gen-dbd-suc secondary outline" data-sucursal="' + escapeHtml(s.id_sucursal) + '" style="padding:0.25rem 0.5rem">DBD</button></td>';
             html += '</tr>';
         }
         html += '</tbody></table></div>';
