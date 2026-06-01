@@ -232,21 +232,19 @@ if (($_GET['action'] ?? '') === 'detail') {
                             <td style="text-align:center;"><input type="checkbox" class="toggle-enabled" data-id="<?= (int)$a['id'] ?>" data-sucursal="<?= htmlspecialchars($sucId) ?>"<?= $estaActivo ? ' checked' : '' ?>></td>
                             <td style="text-align:center;"><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>" data-sucursal="<?= htmlspecialchars($sucId) ?>"<?= $estaSync ? ' checked' : '' ?>></td>
                             <?php
-                                $resultado = $a['ultimo_resultado'] ?? 'pending';
-                                $badgeColor = match ($resultado) {
-                                    'downloaded'    => '#2e7d32',
-                                    'skip'          => '#1565c0',
-                                    'pending'       => '#9e9e9e',
-                                    'error-br'      => '#c62828',
-                                    'error-flat'    => '#c62828',
-                                    'error-tmp'     => '#c62828',
-                                    'error-blocked' => '#e65100',
-                                    default         => '#9e9e9e',
+                                $r = $a['ultimo_resultado'] ?? 'pending';
+                                $rSym = match ($r) {
+                                    'downloaded'    => '[+]',
+                                    'skip'          => '[=]',
+                                    'pending'       => '[?]',
+                                    'error-br'      => '[Eb]',
+                                    'error-flat'    => '[Ef]',
+                                    'error-tmp'     => '[Et]',
+                                    'error-blocked' => '[EB]',
+                                    default         => '[?]',
                                 };
                             ?>
-                            <td style="text-align:center;">
-                                <span style="display:inline-block;padding:0.1rem 0.4rem;border-radius:3px;background:<?= $badgeColor ?>;color:#fff;font-size:0.75rem;font-weight:600;"><?= htmlspecialchars($resultado) ?></span>
-                            </td>
+                            <td style="text-align:center;"><code style="background:#e9ecef;font-size:0.8rem"><?= $rSym ?></code></td>
                             <td style="text-align:center;"><?= (int)($a['n_envios'] ?? 0) ?> / <?= (int)($a['n_exitos'] ?? 0) ?></td>
                             <td>
                                 <svg class="btn-desasociar" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-sucursal="<?= htmlspecialchars($sucId) ?>" data-archivo="<?= (int)$a['id'] ?>" style="cursor:pointer" title="Desasociar"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 22v-2"/><path d="M9 15l6 -6"/><path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464"/><path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"/><path d="M20 17h2"/><path d="M2 7h2"/><path d="M7 2v2"/></svg>
