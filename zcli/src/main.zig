@@ -455,6 +455,40 @@ fn confirmBatch(client: *std.http.Client, allocator: Allocator, config: *const C
     debug("  confirmBatch: OK", .{});
 }
 
+fn verifyDbdAuth(client: *std.http.Client, allocator: Allocator, config: *const Config) bool {
+    const url = std.fmt.allocPrint(allocator, "{s}/api/v1/dbd-auth", .{config.api_base_url}) catch return false;
+    defer allocator.free(url);
+
+    const body = std.fmt.allocPrint(allocator, "{{\"nickname\":\"{s}\",\"password\":\"{s}\",\"sucursal_id\":\"{s}\"}}", .{ g_dbd_user, g_dbd_pass, config.sucursal_id }) catch return false;
+    defer allocator.free(body);
+
+    const auth = httpHeader("X-API-Key", config.api_key);
+    const content_type = httpHeader("Content-Type", "application/json");
+    const headers = [_]std.http.Header{ content_type, auth };
+    var redirect_buf: [4096]u8 = undefined;
+    var resp_buf: [1024]u8 = undefined;
+    var fw = std.Io.Writer.fixed(&resp_buf);
+
+    debug("  verifyDbdAuth: POST {s} body={s}", .{ url, body });
+    const result = client.fetch(.{
+        .location = .{ .url = url },
+        .method = .POST,
+        .payload = body,
+        .extra_headers = &headers,
+        .redirect_buffer = &redirect_buf,
+        .response_writer = &fw,
+    }) catch |err| {
+        debug("  verifyDbdAuth: ERROR {s}", .{@errorName(err)});
+        return false;
+    };
+    if (result.status.class() != .success) {
+        debug("  verifyDbdAuth: status={s}", .{@tagName(result.status.class())});
+        return false;
+    }
+    debug("  verifyDbdAuth: OK", .{});
+    return true;
+}
+
 fn computeFullHashU64(data: []const u8) u64 {
     var h = std.hash.XxHash3.init(0);
     h.update(data);
@@ -582,7 +616,7 @@ fn promptDbdCredentials(allocator: Allocator) void {
     {
         var attempts: u3 = 0;
         while (attempts < 3) {
-            debugInline("Usuario DBD: ", .{});
+            printInline("Usuario DBD: ", .{});
             var buf: [64]u8 = undefined;
             user_line = readLine(&buf) catch { attempts += 1; continue; };
             if (user_line.len > 0 and !std.mem.eql(u8, user_line, "null"))
@@ -596,7 +630,7 @@ fn promptDbdCredentials(allocator: Allocator) void {
     {
         var attempts: u3 = 0;
         while (attempts < 3) {
-            debugInline("Clave DBD: ", .{});
+            printInline("Clave DBD: ", .{});
             var buf: [64]u8 = undefined;
             pass_line = readLine(&buf) catch { attempts += 1; continue; };
             if (pass_line.len > 0 and !std.mem.eql(u8, pass_line, "null"))
@@ -690,18 +724,9 @@ fn readMenuLine(prompt: []const u8, timeout_sec: i64, default: []const u8, buf: 
 fn tryDownloadWithRetry(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, ruta: []const u8, file_br: []const u8, max_retries: u5) ![]u8 {
     var i: u5 = 0;
     while (i < max_retries) : (i += 1) {
-        if (isDbd(ruta) and !g_dbd_authed) {
-            promptDbdCredentials(allocator);
-        }
         const data = downloadFile(client, allocator, config, nombre, ruta) catch |err| {
             if (i + 1 < max_retries) {
                 debug("  [!] {s} | Error download (intento {}/{}), re-descargando...", .{ nombre, i + 1, max_retries });
-                if (err == error.HttpError and isDbd(ruta)) {
-                    if (g_dbd_authed) {
-                        g_dbd_authed = false;
-                        print("  [!] Clave DBD incorrecta. Intente de nuevo.", .{});
-                    }
-                }
                 continue;
             }
             return err;
@@ -864,6 +889,11 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 fn downloadGroup(client: *std.http.Client, allocator: Allocator, config: *const Config, files: []PendingFile, indices: []const usize, group_name: []const u8) u8 {
     if (!g_dbd_authed) {
         promptDbdCredentials(allocator);
+    }
+    if (g_dbd_authed and !verifyDbdAuth(client, allocator, config)) {
+        g_dbd_authed = false;
+        print("  [!] Error de autenticacion DBD.", .{});
+        return 1;
     }
     const t0 = extern_fns.time(null);
     var fail_count: u32 = 0;

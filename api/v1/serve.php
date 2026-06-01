@@ -64,7 +64,7 @@ try {
     $fileType = strpos($file['ruta'], 'DSBLIND') !== false ? 'DBD' : 'NOR';
 
     if ($fileType === 'DBD') {
-        $dbdUser = $_SERVER['HTTP_X_DBD_USER'] ?? '';
+        $dbdUser = strtoupper($_SERVER['HTTP_X_DBD_USER'] ?? '');
         $dbdPass = $_SERVER['HTTP_X_DBD_PASSWORD'] ?? '';
 
         if ($dbdPass === '' || strtolower($dbdPass) === 'null') {
@@ -85,7 +85,7 @@ try {
                 exit;
             }
         } else {
-            $stmtU = $pdo->prepare("SELECT id, password FROM usuarios WHERE nickname = ? AND enabled = TRUE AND can_dsblind = TRUE");
+            $stmtU = $pdo->prepare("SELECT id, password FROM usuarios WHERE UPPER(nickname) = ? AND enabled = TRUE AND can_dsblind = TRUE");
             $stmtU->execute([$dbdUser]);
             $user = $stmtU->fetch();
             if (!$user || !password_verify($dbdPass, $user['password'])) {
