@@ -253,7 +253,7 @@ if (($_GET['action'] ?? '') === 'detail') {
                             <td style="text-align:center;"><?= (int)($a['n_envios'] ?? 0) ?></td>
                             <td style="text-align:center;"><?= (int)($a['n_exitos'] ?? 0) ?></td>
                             <td>
-                                <button type="button" class="btn-desasociar" title="Desasociar" data-sucursal="<?= htmlspecialchars($sucId) ?>" data-archivo="<?= (int)$a['id'] ?>" style="background:none;border:none;cursor:pointer;color:#c62828;padding:0.2rem 0.4rem;vertical-align:middle"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 22v-2"/><path d="M9 15l6 -6"/><path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464"/><path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"/><path d="M20 17h2"/><path d="M2 7h2"/><path d="M7 2v2"/></svg></button>
+                                <svg class="btn-desasociar" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-sucursal="<?= htmlspecialchars($sucId) ?>" data-archivo="<?= (int)$a['id'] ?>" style="cursor:pointer" title="Desasociar"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 22v-2"/><path d="M9 15l6 -6"/><path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464"/><path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"/><path d="M20 17h2"/><path d="M2 7h2"/><path d="M7 2v2"/></svg>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -433,21 +433,31 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('click', function (e) {
         var btn = e.target.closest('.btn-desasociar');
         if (!btn) return;
+        var archivoId = btn.dataset.archivo;
+        var sucursalId = btn.dataset.sucursal;
         var formData = new FormData();
         formData.append('action', 'desasociar');
-        formData.append('sucursal_id', btn.dataset.sucursal);
-        formData.append('archivo_id', btn.dataset.archivo);
+        formData.append('sucursal_id', sucursalId);
+        formData.append('archivo_id', archivoId);
         fetch('/dashboard/sucursales', { method: 'POST', body: formData })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.ok) { alert(data.error || 'Error'); return; }
                 var tr = btn.closest('tr');
                 if (tr) tr.parentNode.removeChild(tr);
-                var subLink = document.querySelector('.suc-subtabs a[data-tab="suc-' + btn.dataset.sucursal + '-archivos"]');
+                var subLink = document.querySelector('.suc-subtabs a[data-tab="suc-' + sucursalId + '-archivos"]');
                 if (subLink) {
                     var m = subLink.textContent.match(/\((\d+)\)/);
                     if (m) subLink.textContent = 'Archivos (' + (parseInt(m[1]) - 1) + ')';
                 }
+                var oldMsg = document.querySelector('.ajax-msg-des');
+                if (oldMsg) oldMsg.parentNode.removeChild(oldMsg);
+                var msg = document.createElement('div');
+                msg.className = 'ajax-msg-des flash flash-success';
+                msg.textContent = 'Archivo #' + archivoId + ' desasociado.';
+                msg.style.cssText = 'position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:999;padding:0.5rem 1rem;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+                document.body.appendChild(msg);
+                setTimeout(function() { msg.parentNode.removeChild(msg); }, 2000);
             })
             .catch(function () { alert('Error de red'); });
     });
