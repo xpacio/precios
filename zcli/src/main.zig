@@ -611,15 +611,16 @@ fn getFileMtime(path_z: [:0]const u8) i64 {
     return st.st_mtime;
 }
 
-fn promptDbdCredentials(allocator: Allocator) void {
+fn promptDbdCredentials(allocator: Allocator) bool {
     var user_line: []const u8 = "";
     {
         var attempts: u3 = 0;
         while (attempts < 3) {
-            printInline("Usuario DBD: ", .{});
+            printInline("Usuario DBD (vacío para cancelar): ", .{});
             var buf: [64]u8 = undefined;
             user_line = readLine(&buf) catch { attempts += 1; continue; };
-            if (user_line.len > 0 and !std.mem.eql(u8, user_line, "null"))
+            if (user_line.len == 0) return false;
+            if (!std.mem.eql(u8, user_line, "null"))
                 break;
             print("  [!] Usuario invalido.", .{});
             attempts += 1;
@@ -640,9 +641,10 @@ fn promptDbdCredentials(allocator: Allocator) void {
         }
     }
 
-    g_dbd_user = allocator.dupe(u8, user_line) catch return;
-    g_dbd_pass = allocator.dupe(u8, pass_line) catch return;
+    g_dbd_user = allocator.dupe(u8, user_line) catch return false;
+    g_dbd_pass = allocator.dupe(u8, pass_line) catch return false;
     g_dbd_authed = true;
+    return true;
 }
 
 fn promptWithTimeout(prompt: []const u8, timeout_sec: i64) bool {
@@ -887,13 +889,16 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 }
 
 fn downloadGroup(client: *std.http.Client, allocator: Allocator, config: *const Config, files: []PendingFile, indices: []const usize, group_name: []const u8) u8 {
-    if (!g_dbd_authed) {
-        promptDbdCredentials(allocator);
-    }
-    if (g_dbd_authed and !verifyDbdAuth(client, allocator, config)) {
+    while (true) {
+        if (!g_dbd_authed) {
+            if (!promptDbdCredentials(allocator)) {
+                print("  [!] Autenticacion cancelada.", .{});
+                return 1;
+            }
+        }
+        if (verifyDbdAuth(client, allocator, config)) break;
         g_dbd_authed = false;
-        print("  [!] Error de autenticacion DBD.", .{});
-        return 1;
+        print("  [!] Credenciales DBD incorrectas. Intente de nuevo.", .{});
     }
     const t0 = extern_fns.time(null);
     var fail_count: u32 = 0;
