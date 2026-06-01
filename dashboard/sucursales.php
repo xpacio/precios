@@ -260,7 +260,7 @@ if (($_GET['action'] ?? '') === 'detail') {
                 <input type="text" name="nombre_sucursal" value="<?= htmlspecialchars($suc['nombre_sucursal']) ?>" required>
             </label>
             <label style="white-space:nowrap;">
-                <input type="checkbox" name="enabled" value="1" <?= ($suc['enabled'] ?? 't') === 't' ? 'checked' : '' ?>>
+                <input type="checkbox" name="enabled" value="1" <?= (($suc['enabled'] ?? false) === true || ($suc['enabled'] ?? 'f') === 't') ? 'checked' : '' ?>>
                 Activa
             </label>
             <button type="submit" class="secondary outline" style="padding:0.3rem 0.8rem;">Guardar</button>
