@@ -202,7 +202,7 @@ if (($_GET['action'] ?? '') === 'detail') {
             <thead>
                 <tr>
                     <th>Archivo</th>
-                    <th style="text-align:center;">fl/br</th>
+                    <th style="text-align:center;">fl–br</th>
                     <th style="text-align:center;">Tipo</th>
                     <th style="text-align:center;">Activo</th>
                     <th style="text-align:center;">Sync</th>
@@ -221,7 +221,7 @@ if (($_GET['action'] ?? '') === 'detail') {
                     ?>
                         <tr<?= $estaActivo ? '' : ' style="opacity:0.4;"' ?>>
                             <td><a href="/dashboard/archivo-editar?id=<?= (int)$a['id'] ?>"><?= htmlspecialchars(str_replace('/srv/precios/', '', $a['ruta']) . '/' . $a['nombre']) ?></a></td>
-                            <td style="text-align:center;"><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code> / <code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
+                            <td style="text-align:center;"><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?>–<?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
                             <td style="text-align:center;">
                               <?php if ($a['es_desblinde'] === 't' || $a['es_desblinde'] === true): ?>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#bf616a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2l0 -6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M8 11v-5a4 4 0 0 1 8 0"/></svg>
