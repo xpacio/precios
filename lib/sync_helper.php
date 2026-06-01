@@ -107,6 +107,9 @@ function processAndCompressFile(string $ruta, string $nombre): array
 
         $pdo->prepare("UPDATE archivo_sucursal SET n_envios = 0, n_exitos = 0, ultimo_resultado = 'pending' WHERE archivo_id = ?")->execute([$archivoId]);
 
+        $pdo->prepare("INSERT INTO archivo_log (archivo_id, action, detalle, prev_flat, new_flat) VALUES (?, 'sync', ?, ?, ?)")
+            ->execute([$archivoId, 'Recomprimido brotli', $existing['xxh3'], $flat]);
+
         return [
             'status' => 'OK',
             'accion' => 'UPDATE',

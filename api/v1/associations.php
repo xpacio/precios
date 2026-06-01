@@ -69,6 +69,9 @@ try {
             DO UPDATE SET archivo_id = EXCLUDED.archivo_id
         ")->execute([$archivoId, $sucursalId, $archivo['nombre'], $esDesblinde ? 't' : 'f']);
 
+        $pdo->prepare("INSERT INTO archivo_log (archivo_id, action, detalle) VALUES (?, 'assoc', ?)")
+            ->execute([$archivoId, 'Asociado a sucursal ' . $sucursalId]);
+
         http_response_code(201);
         echo json_encode(['status' => 'OK', 'mensaje' => 'Asociación creada']);
         exit;

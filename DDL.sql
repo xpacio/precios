@@ -113,3 +113,16 @@ CREATE TABLE sync_log (
     duration_sec NUMERIC(8,2) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE archivo_log (
+    id SERIAL PRIMARY KEY,
+    archivo_id INT NOT NULL REFERENCES archivos(id) ON DELETE CASCADE,
+    action VARCHAR(20) NOT NULL,
+    prev_flat VARCHAR(6),
+    new_flat VARCHAR(6),
+    detalle VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_archivo_log_archivo ON archivo_log(archivo_id);
+CREATE INDEX idx_archivo_log_created ON archivo_log(created_at);

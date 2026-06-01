@@ -75,6 +75,9 @@ try {
         ->execute([$archivoId, $idSucursal, $finalFileName, $esDesblinde ? 't' : 'f']);
     $pdo->commit();
 
+    $pdo->prepare("INSERT INTO archivo_log (archivo_id, action, detalle) VALUES (?, 'upload', ?)")
+        ->execute([$archivoId, 'Archivo cargado por API']);
+
     echo "STATUS: OK\nID: $archivoId\nMENSAJE: Archivo cargado y registrado exitosamente";
 } catch (Exception $e) {
     if (isset($pdo)) $pdo->rollBack();

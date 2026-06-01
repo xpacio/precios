@@ -54,6 +54,9 @@ try {
 
             $pdo->prepare("UPDATE archivo_sucursal SET sync = FALSE, updated_at = NOW() WHERE archivo_id = ?")
                 ->execute([$row['id']]);
+
+            $pdo->prepare("INSERT INTO archivo_log (archivo_id, action, detalle, prev_flat, new_flat) VALUES (?, 'verify', ?, ?, ?)")
+                ->execute([$row['id'], 'Verificado y re-comprimido', $row['flat'], $flat]);
             $cambiados++;
         } else {
             $sin_cambios++;

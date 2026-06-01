@@ -240,6 +240,49 @@ require __DIR__ . '/header.php';
     </table>
 </div>
 
+<h2>Historial de Cambios</h2>
+
+<?php
+$logStmt = $pdo->prepare("
+    SELECT id, action, prev_flat, new_flat, detalle, created_at
+    FROM archivo_log
+    WHERE archivo_id = ?
+    ORDER BY created_at DESC
+    LIMIT 30
+");
+$logStmt->execute([$id]);
+$logEntries = $logStmt->fetchAll();
+?>
+
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Acción</th>
+                <th>Detalle</th>
+                <th>Flat Anterior</th>
+                <th>Flat Nuevo</th>
+                <th>Fecha</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($logEntries)): ?>
+                <tr><td colspan="5">Sin cambios registrados.</td></tr>
+            <?php else: ?>
+                <?php foreach ($logEntries as $entry): ?>
+                    <tr>
+                        <td><code><?= htmlspecialchars($entry['action']) ?></code></td>
+                        <td><?= htmlspecialchars($entry['detalle'] ?? '-') ?></td>
+                        <td><?= htmlspecialchars($entry['prev_flat'] ?? '-') ?></td>
+                        <td><?= htmlspecialchars($entry['new_flat'] ?? '-') ?></td>
+                        <td><?= htmlspecialchars($entry['created_at']) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     function toggleField(action, cb) {
