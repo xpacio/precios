@@ -67,11 +67,18 @@ try {
         $dbdUser = $_SERVER['HTTP_X_DBD_USER'] ?? '';
         $dbdPass = $_SERVER['HTTP_X_DBD_PASSWORD'] ?? '';
 
+        if ($dbdPass === '' || strtolower($dbdPass) === 'null') {
+            http_response_code(403);
+            header('Content-Type: text/plain');
+            echo "ERROR: Clave DBD invalida.";
+            exit;
+        }
+
         if ($dbdUser === 'GTE') {
-            $stmtS = $pdo->prepare("SELECT clave_dbd FROM sucursales WHERE id_sucursal = ?");
+            $stmtS = $pdo->prepare("SELECT clave_dbd FROM sucursales WHERE id_sucursal = ? AND clave_dbd IS NOT NULL");
             $stmtS->execute([$sucursalId]);
             $suc = $stmtS->fetch();
-            if (!$suc || $suc['clave_dbd'] === null || $suc['clave_dbd'] !== $dbdPass) {
+            if (!$suc || $suc['clave_dbd'] !== $dbdPass) {
                 http_response_code(403);
                 header('Content-Type: text/plain');
                 echo "ERROR: Clave DBD incorrecta.";

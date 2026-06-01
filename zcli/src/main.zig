@@ -578,21 +578,25 @@ fn getFileMtime(path_z: [:0]const u8) i64 {
 }
 
 fn promptDbdCredentials(allocator: Allocator) void {
-    debugInline("Usuario DBD: ", .{});
-    var user_buf: [64]u8 = undefined;
-    const user_line = readLine(&user_buf) catch {
-        debug("Error leyendo usuario DBD", .{});
-        return;
-    };
-    if (user_line.len == 0) return;
+    var user_line: []const u8 = "";
+    while (true) {
+        debugInline("Usuario DBD: ", .{});
+        var buf: [64]u8 = undefined;
+        user_line = readLine(&buf) catch continue;
+        if (user_line.len > 0 and !std.mem.eql(u8, user_line, "null"))
+            break;
+        print("  [!] Usuario invalido.", .{});
+    }
 
-    debugInline("Clave DBD: ", .{});
-    var pass_buf: [64]u8 = undefined;
-    const pass_line = readLine(&pass_buf) catch {
-        debug("Error leyendo clave DBD", .{});
-        return;
-    };
-    if (pass_line.len == 0) return;
+    var pass_line: []const u8 = "";
+    while (true) {
+        debugInline("Clave DBD: ", .{});
+        var buf: [64]u8 = undefined;
+        pass_line = readLine(&buf) catch continue;
+        if (pass_line.len > 0 and !std.mem.eql(u8, pass_line, "null"))
+            break;
+        print("  [!] Clave invalida.", .{});
+    }
 
     g_dbd_user = allocator.dupe(u8, user_line) catch return;
     g_dbd_pass = allocator.dupe(u8, pass_line) catch return;
