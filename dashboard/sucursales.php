@@ -337,6 +337,39 @@ function activateTab(tabId) {
     if (content) content.style.display = '';
 }
 
+function loadSucursalTab(sucId) {
+    var existingTab = document.querySelector('#sucursales-tabs a[data-tab="suc-' + sucId + '"]');
+    if (existingTab) {
+        activateTab('suc-' + sucId);
+        return;
+    }
+    fetch('/dashboard/sucursales?action=detail&sucursal=' + encodeURIComponent(sucId))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.ok) { alert(data.error || 'Error al cargar'); return; }
+            var nav = document.querySelector('#sucursales-tabs ul');
+            var li = document.createElement('li');
+            li.innerHTML = '<a href="#" data-tab="suc-' + data.id + '" class="contrast">' + escapeHtml(data.id + ' — ' + data.nombre) + '</a>';
+            nav.insertBefore(li, nav.lastElementChild);
+            var container = document.getElementById('tab-content-container');
+            var div = document.createElement('div');
+            div.id = 'tab-suc-' + data.id;
+            div.className = 'suc-detail-tab tab-content';
+            div.innerHTML =
+                '<nav class="tabs suc-subtabs">' +
+                    '<ul>' +
+                        '<li><a href="#" data-tab="suc-' + data.id + '-archivos" class="contrast">Archivos (' + data.total + ')</a></li>' +
+                        '<li><a href="#" data-tab="suc-' + data.id + '-editar">Editar</a></li>' +
+                    '</ul>' +
+                '</nav>' +
+                '<div id="suc-' + data.id + '-archivos" class="suc-subcontent">' + data.archivos_html + '</div>' +
+                '<div id="suc-' + data.id + '-editar" class="suc-subcontent" style="display:none">' + data.editar_html + '</div>';
+            container.appendChild(div);
+            activateTab('suc-' + data.id);
+        })
+        .catch(function () { alert('Error de red al cargar sucursal'); });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     // === Main tab switching ===
     document.addEventListener('click', function (e) {
@@ -472,43 +505,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var btn = e.target.closest('.ver-sucursal');
         if (!btn) return;
         e.preventDefault();
-        var sucId = btn.dataset.sucursal;
-        var existingTab = document.querySelector('#sucursales-tabs a[data-tab="suc-' + sucId + '"]');
-        if (existingTab) {
-            activateTab('suc-' + sucId);
-            return;
-        }
-
-        fetch('/dashboard/sucursales?action=detail&sucursal=' + encodeURIComponent(sucId))
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (!data.ok) {
-                    alert(data.error || 'Error al cargar');
-                    return;
-                }
-                var nav = document.querySelector('#sucursales-tabs ul');
-                var li = document.createElement('li');
-                li.innerHTML = '<a href="#" data-tab="suc-' + data.id + '" class="contrast">' + escapeHtml(data.id + ' — ' + data.nombre) + '</a>';
-                nav.insertBefore(li, nav.lastElementChild);
-
-                var container = document.getElementById('tab-content-container');
-                var div = document.createElement('div');
-                div.id = 'tab-suc-' + data.id;
-                div.className = 'suc-detail-tab tab-content';
-                div.innerHTML =
-                    '<nav class="tabs suc-subtabs">' +
-                        '<ul>' +
-                            '<li><a href="#" data-tab="suc-' + data.id + '-archivos" class="contrast">Archivos (' + data.total + ')</a></li>' +
-                            '<li><a href="#" data-tab="suc-' + data.id + '-editar">Editar</a></li>' +
-                        '</ul>' +
-                    '</nav>' +
-                    '<div id="suc-' + data.id + '-archivos" class="suc-subcontent">' + data.archivos_html + '</div>' +
-                    '<div id="suc-' + data.id + '-editar" class="suc-subcontent" style="display:none">' + data.editar_html + '</div>';
-                container.appendChild(div);
-
-                activateTab('suc-' + data.id);
-            })
-            .catch(function () { alert('Error de red al cargar sucursal'); });
+        loadSucursalTab(btn.dataset.sucursal);
     });
 
     // === Gen DBD Suc (habilitar todos DSBLIND + generar clave) ===
@@ -576,6 +573,13 @@ document.addEventListener('DOMContentLoaded', function () {
         clearTimeout(timer);
         timer = setTimeout(search, 300);
     });
+
+    // === Auto-load from URL ?sucursal=X ===
+    var params = new URLSearchParams(window.location.search);
+    var autoSuc = params.get('sucursal');
+    if (autoSuc) {
+        loadSucursalTab(autoSuc);
+    }
 });
 </script>
 
