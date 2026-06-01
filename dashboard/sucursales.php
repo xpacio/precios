@@ -233,18 +233,18 @@ if (($_GET['action'] ?? '') === 'detail') {
                             <td style="text-align:center;"><input type="checkbox" class="toggle-sync" data-id="<?= (int)$a['id'] ?>" data-sucursal="<?= htmlspecialchars($sucId) ?>"<?= $estaSync ? ' checked' : '' ?>></td>
                             <?php
                                 $r = $a['ultimo_resultado'] ?? 'pending';
-                                $rSym = match ($r) {
-                                    'downloaded'    => '[+]',
-                                    'skip'          => '[=]',
-                                    'pending'       => '[?]',
-                                    'error-br'      => '[Eb]',
-                                    'error-flat'    => '[Ef]',
-                                    'error-tmp'     => '[Et]',
-                                    'error-blocked' => '[EB]',
-                                    default         => '[?]',
+                                $rMeta = match ($r) {
+                                    'downloaded'    => ['[+]', '#a3be8c', '#fff'],
+                                    'skip'          => ['[=]', '#81a1c1', '#fff'],
+                                    'pending'       => ['[?]', '#ebcb8b', '#2e3440'],
+                                    'error-br'      => ['[Eb]', '#bf616a', '#fff'],
+                                    'error-flat'    => ['[Ef]', '#bf616a', '#fff'],
+                                    'error-tmp'     => ['[Et]', '#d08770', '#fff'],
+                                    'error-blocked' => ['[EB]', '#d08770', '#fff'],
+                                    default         => ['[?]', '#ebcb8b', '#2e3440'],
                                 };
                             ?>
-                            <td style="text-align:center;"><code style="background:#e9ecef;font-size:0.8rem" title="<?= htmlspecialchars($r) ?>"><?= $rSym ?></code></td>
+                            <td style="text-align:center;"><code style="background:<?= $rMeta[1] ?>;color:<?= $rMeta[2] ?>;font-size:0.8rem" title="<?= htmlspecialchars($r) ?>"><?= $rMeta[0] ?></code></td>
                             <td style="text-align:center;"><?= (int)($a['n_envios'] ?? 0) ?> / <?= (int)($a['n_exitos'] ?? 0) ?></td>
                             <td>
                                 <svg class="btn-desasociar" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-sucursal="<?= htmlspecialchars($sucId) ?>" data-archivo="<?= (int)$a['id'] ?>" style="cursor:pointer" title="Desasociar"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 22v-2"/><path d="M9 15l6 -6"/><path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464"/><path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"/><path d="M20 17h2"/><path d="M2 7h2"/><path d="M7 2v2"/></svg>
