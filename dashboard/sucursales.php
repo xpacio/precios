@@ -202,20 +202,18 @@ if (($_GET['action'] ?? '') === 'detail') {
             <thead>
                 <tr>
                     <th>Archivo</th>
-                    <th>fl</th>
-                    <th>br</th>
+                    <th style="text-align:center;">fl/br</th>
                     <th style="text-align:center;">Tipo</th>
                     <th style="text-align:center;">Activo</th>
                     <th style="text-align:center;">Sync</th>
                     <th style="text-align:center;">Resultado</th>
-                    <th style="text-align:center;">Env</th>
-                    <th style="text-align:center;">Ex</th>
+                    <th style="text-align:center;">Env/Ex</th>
                     <th>Acción</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($asociados)): ?>
-                    <tr><td colspan="10">Sin archivos asociados</td></tr>
+                    <tr><td colspan="8">Sin archivos asociados</td></tr>
                 <?php else: ?>
                     <?php foreach ($asociados as $a):
                         $estaSync = ($a['sync'] === 't' || $a['sync'] === true);
@@ -223,8 +221,7 @@ if (($_GET['action'] ?? '') === 'detail') {
                     ?>
                         <tr<?= $estaActivo ? '' : ' style="opacity:0.4;"' ?>>
                             <td><a href="/dashboard/archivo-editar?id=<?= (int)$a['id'] ?>"><?= htmlspecialchars(str_replace('/srv/precios/', '', $a['ruta']) . '/' . $a['nombre']) ?></a></td>
-                            <td><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code></td>
-                            <td><code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
+                            <td style="text-align:center;"><code><?= htmlspecialchars(!empty($a['flat']) ? substr($a['flat'], 0, 3) : '-') ?></code> / <code><?= htmlspecialchars(!empty($a['br']) ? substr($a['br'], 0, 3) : '-') ?></code></td>
                             <td style="text-align:center;">
                               <?php if ($a['es_desblinde'] === 't' || $a['es_desblinde'] === true): ?>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#bf616a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2l0 -6"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M8 11v-5a4 4 0 0 1 8 0"/></svg>
@@ -250,8 +247,7 @@ if (($_GET['action'] ?? '') === 'detail') {
                             <td style="text-align:center;">
                                 <span style="display:inline-block;padding:0.1rem 0.4rem;border-radius:3px;background:<?= $badgeColor ?>;color:#fff;font-size:0.75rem;font-weight:600;"><?= htmlspecialchars($resultado) ?></span>
                             </td>
-                            <td style="text-align:center;"><?= (int)($a['n_envios'] ?? 0) ?></td>
-                            <td style="text-align:center;"><?= (int)($a['n_exitos'] ?? 0) ?></td>
+                            <td style="text-align:center;"><?= (int)($a['n_envios'] ?? 0) ?> / <?= (int)($a['n_exitos'] ?? 0) ?></td>
                             <td>
                                 <svg class="btn-desasociar" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-sucursal="<?= htmlspecialchars($sucId) ?>" data-archivo="<?= (int)$a['id'] ?>" style="cursor:pointer" title="Desasociar"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 22v-2"/><path d="M9 15l6 -6"/><path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464"/><path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"/><path d="M20 17h2"/><path d="M2 7h2"/><path d="M7 2v2"/></svg>
                             </td>
