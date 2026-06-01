@@ -32,7 +32,7 @@ try {
         $stmt = $pdo->prepare("SELECT clave_dbd FROM sucursales WHERE id_sucursal = ? AND clave_dbd IS NOT NULL");
         $stmt->execute([$sucursalId]);
         $suc = $stmt->fetch();
-        if (!$suc || $suc['clave_dbd'] !== $password) {
+        if (!$suc || strtoupper($suc['clave_dbd']) !== strtoupper($password)) {
             http_response_code(403);
             echo json_encode(['ok' => false, 'error' => 'Clave DBD incorrecta.']);
             exit;

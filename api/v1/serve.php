@@ -78,7 +78,7 @@ try {
             $stmtS = $pdo->prepare("SELECT clave_dbd FROM sucursales WHERE id_sucursal = ? AND clave_dbd IS NOT NULL");
             $stmtS->execute([$sucursalId]);
             $suc = $stmtS->fetch();
-            if (!$suc || $suc['clave_dbd'] !== $dbdPass) {
+            if (!$suc || strtoupper($suc['clave_dbd']) !== strtoupper($dbdPass)) {
                 http_response_code(403);
                 header('Content-Type: text/plain');
                 echo "ERROR: Clave DBD incorrecta.";
