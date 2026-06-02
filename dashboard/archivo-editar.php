@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'desas
 
 // === GET: sucursales ligadas ===
 $sucStmt = $pdo->prepare("
-    SELECT s.id_sucursal, s.nombre_sucursal, asu.sync, asu.enabled
+    SELECT s.id_sucursal, s.nombre_sucursal, asu.sync, asu.enabled, s.clave_dbd
     FROM archivo_sucursal asu
     JOIN sucursales s ON s.id_sucursal = asu.sucursal_id
     WHERE asu.archivo_id = ?
@@ -228,12 +228,13 @@ require __DIR__ . '/header.php';
                 <th>Nombre</th>
                 <th>Activo</th>
                 <th>Descargado</th>
+                <th>Clave DBD</th>
                 <th>Acción</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($sucursales)): ?>
-                <tr><td colspan="5">Sin sucursales asociadas. <a href="/dashboard/archivos?tab=asociar&id=<?= $id ?>&q=<?= urlencode($arch['nombre']) ?>">Asociar ahora</a></td></tr>
+                <tr><td colspan="6">Sin sucursales asociadas. <a href="/dashboard/archivos?tab=asociar&id=<?= $id ?>&q=<?= urlencode($arch['nombre']) ?>">Asociar ahora</a></td></tr>
             <?php else: ?>
                 <?php foreach ($sucursales as $s):
                     $activo = ($s['enabled'] === 't' || $s['enabled'] === true);
@@ -243,6 +244,7 @@ require __DIR__ . '/header.php';
                         <td><?= htmlspecialchars($s['nombre_sucursal']) ?></td>
                         <td><input type="checkbox" class="toggle-enabled" data-id="<?= htmlspecialchars($s['id_sucursal']) ?>"<?= $activo ? ' checked' : '' ?>></td>
                         <td><input type="checkbox" class="toggle-sync" data-id="<?= htmlspecialchars($s['id_sucursal']) ?>"<?= ($s['sync'] === 't' || $s['sync'] === true) ? ' checked' : '' ?>></td>
+                        <td><code style="font-size:0.8rem;"><?= $s['clave_dbd'] ? htmlspecialchars($s['clave_dbd']) : '-' ?></code></td>
                         <td style="white-space:nowrap">
                             <?php if (strpos($arch['ruta'], 'DSBLIND') !== false): ?>
                             <button class="gen-dbd-file secondary outline" data-sucursal="<?= htmlspecialchars($s['id_sucursal']) ?>" style="padding:0.2rem 0.5rem;font-size:0.8rem">DBD</button>

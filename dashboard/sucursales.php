@@ -162,6 +162,59 @@ if ($_GET['ajax'] ?? false) {
     exit;
 }
 
+// === AJAX: sin-archivos tab ===
+if (($_GET['action'] ?? '') === 'sin-archivos') {
+    header('Content-Type: application/json');
+    $stmt = $pdo->query("
+        SELECT s.id_sucursal, s.nombre_sucursal, s.enabled
+        FROM sucursales s
+        WHERE NOT EXISTS (
+            SELECT 1 FROM archivo_sucursal
+            WHERE sucursal_id = s.id_sucursal AND enabled = TRUE
+        )
+        ORDER BY s.id_sucursal
+        LIMIT 10
+    ");
+    $rows = $stmt->fetchAll();
+    ob_start();
+    ?>
+    <h2>Sucursales sin archivos asociados</h2>
+    <?php if (empty($rows)): ?>
+        <p>Todas las sucursales tienen al menos un archivo asociado.</p>
+    <?php else: ?>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($rows as $s):
+                        $enabled = ($s['enabled'] === 't' || $s['enabled'] === true);
+                    ?>
+                        <tr>
+                            <td><code><?= htmlspecialchars($s['id_sucursal']) ?></code></td>
+                            <td><?= htmlspecialchars($s['nombre_sucursal']) ?></td>
+                            <td><span style="color:<?= $enabled ? 'green">Activa' : 'red">Inactiva' ?></span></td>
+                            <td>
+                                <a href="/dashboard/archivos?tab=asociar&sucursal=<?= urlencode($s['id_sucursal']) ?>" role="button" class="secondary outline" style="padding:0.25rem 0.5rem;">Asociar archivos</a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+    <?php
+    $html = ob_get_clean();
+    echo json_encode(['ok' => true, 'html' => $html]);
+    exit;
+}
+
 // === AJAX: sucursal detail for dynamic tabs ===
 if (($_GET['action'] ?? '') === 'detail') {
     header('Content-Type: application/json');
@@ -459,6 +512,17 @@ document.addEventListener('DOMContentLoaded', function () {
         if (tabId.indexOf('suc-') === 0) {
             var sucId = tabId.replace('suc-', '');
             loadSucursalTab(sucId);
+        } else if (tabId === 'sin-archivos') {
+            fetch('/dashboard/sucursales?action=sin-archivos')
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.ok) {
+                        var content = document.getElementById('tab-sin-archivos');
+                        if (content) content.innerHTML = data.html;
+                    }
+                    activateTab(tabId);
+                })
+                .catch(function () { activateTab(tabId); });
         } else {
             activateTab(tabId);
         }
