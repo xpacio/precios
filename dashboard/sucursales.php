@@ -240,7 +240,7 @@ if (($_GET['action'] ?? '') === 'detail') {
         FROM archivo_sucursal asu
         JOIN archivos a ON a.id = asu.archivo_id
         WHERE asu.sucursal_id = ?
-        ORDER BY asu.enabled DESC, a.ruta, a.nombre
+        ORDER BY a.ruta, a.nombre
     ");
     $stmt->execute([$sucId]);
     $asociados = $stmt->fetchAll();

@@ -32,9 +32,11 @@ pub fn build(b: *std.Build) void {
     mod.addIncludePath(b.path("brotli/c/include"));
 
     for (&brotli_c) |cfile| {
-        mod.addCSourceFile(.{ .file = b.path(cfile), .flags = &.{"-Os"} });
+        mod.addCSourceFile(.{ .file = b.path(cfile), .flags = &.{ "-Os", "-s", "-fdata-sections", "-ffunction-sections" } });
     }
 
     const exe = b.addExecutable(.{ .name = "zcli", .root_module = mod });
+    exe.link_gc_sections = true;
+    exe.link_eh_frame_hdr = false;
     b.installArtifact(exe);
 }
