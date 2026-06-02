@@ -249,10 +249,19 @@ require __DIR__ . '/header.php';
                             <?php if (strpos($arch['ruta'], 'DSBLIND') !== false): ?>
                             <button class="gen-dbd-file secondary outline" data-sucursal="<?= htmlspecialchars($s['id_sucursal']) ?>" style="padding:0.2rem 0.5rem;font-size:0.8rem">DBD</button>
                             <?php endif; ?>
-                            <form method="POST" style="display:inline">
+                            <form method="POST" style="display:inline" class="form-desasociar">
                                 <input type="hidden" name="action" value="desasociar">
                                 <input type="hidden" name="sucursal_id" value="<?= htmlspecialchars($s['id_sucursal']) ?>">
-                                <button type="submit" class="secondary outline" style="padding:0.2rem 0.5rem;font-size:0.8rem">Desasociar</button>
+                                <svg class="btn-desasociar" onclick="this.closest('form').submit()" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c62828" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="cursor:pointer;vertical-align:middle" title="Desasociar">
+                                    <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                                    <path d="M17 22v-2"/>
+                                    <path d="M9 15l6 -6"/>
+                                    <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464"/>
+                                    <path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"/>
+                                    <path d="M20 17h2"/>
+                                    <path d="M2 7h2"/>
+                                    <path d="M7 2v2"/>
+                                </svg>
                             </form>
                         </td>
                     </tr>
