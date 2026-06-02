@@ -172,7 +172,7 @@ if (($_GET['action'] ?? '') === 'detail') {
         exit;
     }
 
-    $stmt = $pdo->prepare("SELECT id_sucursal, nombre_sucursal, enabled FROM sucursales WHERE id_sucursal = ?");
+    $stmt = $pdo->prepare("SELECT id_sucursal, nombre_sucursal, enabled, clave_dbd FROM sucursales WHERE id_sucursal = ?");
     $stmt->execute([$sucId]);
     $suc = $stmt->fetch();
 
@@ -191,6 +191,17 @@ if (($_GET['action'] ?? '') === 'detail') {
     ");
     $stmt->execute([$sucId]);
     $asociados = $stmt->fetchAll();
+
+    $dsblindCount = 0;
+    foreach ($asociados as $a) {
+        if ($a['es_desblinde'] === 't' || $a['es_desblinde'] === true) {
+            $dsblindCount++;
+        }
+    }
+
+    $dbdStmt = $pdo->prepare("SELECT id, file_name, dbd_user, created_at FROM cli_log WHERE sucursal_id = ? AND file_type = 'DBD' ORDER BY created_at DESC LIMIT 20");
+    $dbdStmt->execute([$sucId]);
+    $dbdLogs = $dbdStmt->fetchAll();
 
     ob_start();
     ?>
@@ -278,13 +289,59 @@ if (($_GET['action'] ?? '') === 'detail') {
     <?php
     $editarHtml = ob_get_clean();
 
+    ob_start();
+    ?>
+    <article>
+        <header><strong>Clave DBD</strong></header>
+        <p style="font-size:1.2rem;font-weight:bold;letter-spacing:0.2em;">
+            <?= $suc['clave_dbd'] ? htmlspecialchars($suc['clave_dbd']) : '<span style="color:#888;">— sin clave</span>' ?>
+        </p>
+        <p style="margin-top:0.5rem;">
+            <button class="gen-dbd-suc secondary outline" data-sucursal="<?= htmlspecialchars($sucId) ?>">Generar clave DBD</button>
+        </p>
+        <p style="font-size:0.85rem;color:#888;">
+            Habilita todos los archivos DSBLIND de esta sucursal (<?= $dsblindCount ?>) y genera una nueva clave de 6 caracteres.
+        </p>
+    </article>
+
+    <?php if (!empty($dbdLogs)): ?>
+    <article style="margin-top:1rem;">
+        <header><strong>Descargas DBD</strong></header>
+        <div class="table-container">
+            <table class="compact-table" style="font-size:0.85rem;">
+                <thead>
+                    <tr>
+                        <th>Archivo</th>
+                        <th>Usuario</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($dbdLogs as $log): ?>
+                        <tr>
+                            <td><code><?= htmlspecialchars($log['file_name']) ?></code></td>
+                            <td><?= htmlspecialchars($log['dbd_user'] ?? '-') ?></td>
+                            <td style="white-space:nowrap;"><?= date('d/m H:i', strtotime($log['created_at'])) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </article>
+    <?php endif; ?>
+    <?php
+    $dbdHtml = ob_get_clean();
+
     echo json_encode([
         'ok' => true,
         'id' => $sucId,
         'nombre' => $suc['nombre_sucursal'],
+        'clave_dbd' => $suc['clave_dbd'],
         'total' => count($asociados),
+        'dsblind_count' => $dsblindCount,
         'archivos_html' => $archivosHtml,
         'editar_html' => $editarHtml,
+        'dbd_html' => $dbdHtml,
     ]);
     exit;
 }
@@ -331,34 +388,62 @@ function activateTab(tabId) {
     if (content) content.style.display = '';
 }
 
+function renderSucursalTab(data) {
+    var container = document.getElementById('tab-content-container');
+    var existing = document.getElementById('tab-suc-' + data.id);
+    if (existing) {
+        existing.querySelector('#suc-' + data.id + '-archivos').innerHTML = data.archivos_html;
+        existing.querySelector('#suc-' + data.id + '-editar').innerHTML = data.editar_html;
+        var dbdDiv = existing.querySelector('#suc-' + data.id + '-dbd');
+        if (dbdDiv) dbdDiv.innerHTML = data.dbd_html;
+        var mainLink = document.querySelector('#sucursales-tabs a[data-tab="suc-' + data.id + '"]');
+        if (mainLink) {
+            var shortName = data.id + ' — ' + data.nombre;
+            mainLink.textContent = shortName;
+        }
+        var archLink = existing.querySelector('a[data-tab="suc-' + data.id + '-archivos"]');
+        if (archLink) archLink.textContent = 'Archivos (' + data.total + ')';
+        return;
+    }
+    var nav = document.querySelector('#sucursales-tabs ul');
+    var li = document.createElement('li');
+    li.innerHTML = '<a href="#" data-tab="suc-' + data.id + '" class="contrast">' + escapeHtml(data.id + ' — ' + data.nombre) + '</a>';
+    nav.insertBefore(li, nav.lastElementChild);
+    var div = document.createElement('div');
+    div.id = 'tab-suc-' + data.id;
+    div.className = 'suc-detail-tab tab-content';
+    div.innerHTML =
+        '<nav class="tabs suc-subtabs">' +
+            '<ul>' +
+                '<li><a href="#" data-tab="suc-' + data.id + '-archivos" class="contrast">Archivos (' + data.total + ')</a></li>' +
+                '<li><a href="#" data-tab="suc-' + data.id + '-editar">Editar</a></li>' +
+                '<li><a href="#" data-tab="suc-' + data.id + '-dbd">DBD</a></li>' +
+            '</ul>' +
+        '</nav>' +
+        '<div id="suc-' + data.id + '-archivos" class="suc-subcontent">' + data.archivos_html + '</div>' +
+        '<div id="suc-' + data.id + '-editar" class="suc-subcontent" style="display:none">' + data.editar_html + '</div>' +
+        '<div id="suc-' + data.id + '-dbd" class="suc-subcontent" style="display:none">' + data.dbd_html + '</div>';
+    container.appendChild(div);
+}
+
 function loadSucursalTab(sucId) {
     var existingTab = document.querySelector('#sucursales-tabs a[data-tab="suc-' + sucId + '"]');
     if (existingTab) {
-        activateTab('suc-' + sucId);
+        fetch('/dashboard/sucursales?action=detail&sucursal=' + encodeURIComponent(sucId))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) { alert(data.error || 'Error al cargar'); return; }
+                renderSucursalTab(data);
+                activateTab('suc-' + data.id);
+            })
+            .catch(function () { alert('Error de red al actualizar'); });
         return;
     }
     fetch('/dashboard/sucursales?action=detail&sucursal=' + encodeURIComponent(sucId))
         .then(function (r) { return r.json(); })
         .then(function (data) {
             if (!data.ok) { alert(data.error || 'Error al cargar'); return; }
-            var nav = document.querySelector('#sucursales-tabs ul');
-            var li = document.createElement('li');
-            li.innerHTML = '<a href="#" data-tab="suc-' + data.id + '" class="contrast">' + escapeHtml(data.id + ' — ' + data.nombre) + '</a>';
-            nav.insertBefore(li, nav.lastElementChild);
-            var container = document.getElementById('tab-content-container');
-            var div = document.createElement('div');
-            div.id = 'tab-suc-' + data.id;
-            div.className = 'suc-detail-tab tab-content';
-            div.innerHTML =
-                '<nav class="tabs suc-subtabs">' +
-                    '<ul>' +
-                        '<li><a href="#" data-tab="suc-' + data.id + '-archivos" class="contrast">Archivos (' + data.total + ')</a></li>' +
-                        '<li><a href="#" data-tab="suc-' + data.id + '-editar">Editar</a></li>' +
-                    '</ul>' +
-                '</nav>' +
-                '<div id="suc-' + data.id + '-archivos" class="suc-subcontent">' + data.archivos_html + '</div>' +
-                '<div id="suc-' + data.id + '-editar" class="suc-subcontent" style="display:none">' + data.editar_html + '</div>';
-            container.appendChild(div);
+            renderSucursalTab(data);
             activateTab('suc-' + data.id);
         })
         .catch(function () { alert('Error de red al cargar sucursal'); });
@@ -518,19 +603,30 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!btn) return;
         e.preventDefault();
         var sucId = btn.dataset.sucursal;
+        btn.setAttribute('aria-busy', 'true');
         var formData = new FormData();
         formData.append('action', 'gen-dbd-suc');
         formData.append('sucursal_id', sucId);
         fetch('/dashboard/sucursales', { method: 'POST', body: formData })
             .then(function (r) { return r.json(); })
             .then(function (data) {
+                btn.removeAttribute('aria-busy');
                 if (data.ok) {
-                    alert('Clave DBD generada para sucursal ' + sucId + ': ' + data.clave_dbd);
+                    var tabContent = document.querySelector('#suc-' + sucId + '-dbd');
+                    if (tabContent) {
+                        var claveHtml = '<span style="font-size:1.2rem;font-weight:bold;letter-spacing:0.2em;">' + escapeHtml(data.clave_dbd) + '</span>';
+                        var claveP = tabContent.querySelector('p strong');
+                        if (claveP) {
+                            claveP.parentElement.innerHTML = claveHtml;
+                        } else {
+                            loadSucursalTab(sucId);
+                        }
+                    }
                 } else {
                     alert('Error: ' + (data.error || 'desconocido'));
                 }
             })
-            .catch(function () { alert('Error de red al generar clave DBD'); });
+            .catch(function () { btn.removeAttribute('aria-busy'); alert('Error de red al generar clave DBD'); });
     });
 
     // === Search ===
@@ -553,8 +649,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<td>' + escapeHtml(s.nombre_sucursal) + '</td>';
             html += '<td style="text-align:center;"><input type="checkbox" class="toggle-sucursal-enabled" data-sucursal="' + escapeHtml(s.id_sucursal) + '"' + (enabled ? ' checked' : '') + '></td>';
             html += '<td>' + s.total_asociados + '</td>';
-            html += '<td style="white-space:nowrap"><a href="#" class="ver-sucursal secondary outline" role="button" data-sucursal="' + escapeHtml(s.id_sucursal) + '" style="padding:0.25rem 0.5rem">Ver</a> ';
-            html += '<button class="gen-dbd-suc secondary outline" data-sucursal="' + escapeHtml(s.id_sucursal) + '" style="padding:0.25rem 0.5rem">DBD</button></td>';
+            html += '<td style="white-space:nowrap"><a href="#" class="ver-sucursal secondary outline" role="button" data-sucursal="' + escapeHtml(s.id_sucursal) + '" style="padding:0.25rem 0.5rem">Ver</a></td>';
             html += '</tr>';
         }
         html += '</tbody></table></div>';

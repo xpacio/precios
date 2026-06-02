@@ -260,6 +260,44 @@ require __DIR__ . '/header.php';
     </table>
 </div>
 
+<?php if (strpos($arch['ruta'], 'DSBLIND') !== false):
+    $dbdLogStmt = $pdo->prepare("
+        SELECT cl.id, cl.sucursal_id, cl.dbd_user, cl.created_at
+        FROM cli_log cl
+        WHERE cl.file_name = ? AND cl.file_type = 'DBD'
+        ORDER BY cl.created_at DESC
+        LIMIT 20
+    ");
+    $dbdLogStmt->execute([$arch['nombre']]);
+    $dbdLogEntries = $dbdLogStmt->fetchAll();
+    if (!empty($dbdLogEntries)):
+?>
+    <h2>Descargas DBD</h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Sucursal</th>
+                    <th>Usuario</th>
+                    <th>Fecha</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($dbdLogEntries as $dl): ?>
+                    <tr>
+                        <td><code><?= htmlspecialchars($dl['sucursal_id']) ?></code></td>
+                        <td><?= htmlspecialchars($dl['dbd_user'] ?? '-') ?></td>
+                        <td style="white-space:nowrap;"><?= date('d/m H:i', strtotime($dl['created_at'])) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+<?php
+    endif;
+endif;
+?>
+
 <h2>Historial de Cambios</h2>
 
 <?php

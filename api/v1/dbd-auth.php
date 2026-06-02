@@ -38,10 +38,10 @@ try {
             exit;
         }
     } else {
-        $stmt = $pdo->prepare("SELECT id, password FROM usuarios WHERE UPPER(nickname) = ? AND enabled = TRUE AND can_dsblind = TRUE");
+        $stmt = $pdo->prepare("SELECT id, clavecorta FROM usuarios WHERE UPPER(nickname) = ? AND enabled = TRUE AND can_dsblind = TRUE");
         $stmt->execute([$nickname]);
         $user = $stmt->fetch();
-        if (!$user || !password_verify($password, $user['password'])) {
+        if (!$user || !password_verify(strtoupper($password), $user['clavecorta'])) {
             http_response_code(403);
             echo json_encode(['ok' => false, 'error' => 'Usuario o clave incorrecta.']);
             exit;

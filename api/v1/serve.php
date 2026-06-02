@@ -85,10 +85,10 @@ try {
                 exit;
             }
         } else {
-            $stmtU = $pdo->prepare("SELECT id, password FROM usuarios WHERE UPPER(nickname) = ? AND enabled = TRUE AND can_dsblind = TRUE");
+            $stmtU = $pdo->prepare("SELECT id, clavecorta FROM usuarios WHERE UPPER(nickname) = ? AND enabled = TRUE AND can_dsblind = TRUE");
             $stmtU->execute([$dbdUser]);
             $user = $stmtU->fetch();
-            if (!$user || !password_verify($dbdPass, $user['password'])) {
+            if (!$user || !password_verify(strtoupper($dbdPass), $user['clavecorta'])) {
                 http_response_code(403);
                 header('Content-Type: text/plain');
                 echo "ERROR: Usuario o clave incorrecta.";
@@ -97,8 +97,8 @@ try {
         }
     }
 
-    $stmt = $pdo->prepare("INSERT INTO cli_log (sucursal_id, file_name, file_type, api_key_id, ip_address) VALUES (?, ?, ?, ?, ?)");
-    $stmt->execute([$sucursalId, $file['nombre'], $fileType, $GLOBALS['_api_key_id'] ?? null, $_SERVER['REMOTE_ADDR'] ?? '']);
+    $stmt = $pdo->prepare("INSERT INTO cli_log (sucursal_id, file_name, file_type, api_key_id, ip_address, dbd_user) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$sucursalId, $file['nombre'], $fileType, $GLOBALS['_api_key_id'] ?? null, $_SERVER['REMOTE_ADDR'] ?? '', $fileType === 'DBD' ? $dbdUser : null]);
 
     header('Content-Type: application/octet-stream');
     header('Content-Length: ' . filesize($brPath));
