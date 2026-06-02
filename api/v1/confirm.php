@@ -12,6 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $input = json_decode(file_get_contents('php://input'), true) ?? $_POST;
 $sucursalId = $input['sucursal_id'] ?? $idSucursal;
+$archivoId = (int)($input['archivo_id'] ?? 0);
 $archivoNombre = $input['nombre'] ?? null;
 $resultado = $input['resultado'] ?? 'downloaded';
 
@@ -35,7 +36,7 @@ try {
                 ultimo_resultado = ?,
                 n_exitos = CASE WHEN ? = 'downloaded' THEN n_exitos + 1 ELSE n_exitos END,
                 updated_at = NOW()
-            WHERE sucursal_id = ? AND nombre = ? AND enabled = TRUE
+            WHERE sucursal_id = ? AND archivo_id = ? AND enabled = TRUE
         ");
 
         $pdo->beginTransaction();
@@ -43,16 +44,17 @@ try {
         $hasDbd = false;
         foreach ($batch as $item) {
             $n = $item['nombre'] ?? null;
+            $aid = (int)($item['archivo_id'] ?? 0);
             $r = $item['resultado'] ?? 'skip';
-            if (!$n || !in_array($r, $validResults, true)) continue;
-            $stmt->execute([$r, $r, $sucursalId, $n]);
+            if (!$n || !$aid || !in_array($r, $validResults, true)) continue;
+            $stmt->execute([$r, $r, $sucursalId, $aid]);
             if ($r === 'downloaded') {
-                $stmtT = $pdo->prepare("SELECT es_desblinde FROM archivo_sucursal WHERE sucursal_id = ? AND nombre = ?");
-                $stmtT->execute([$sucursalId, $n]);
+                $stmtT = $pdo->prepare("SELECT es_desblinde FROM archivo_sucursal WHERE sucursal_id = ? AND archivo_id = ?");
+                $stmtT->execute([$sucursalId, $aid]);
                 $rowT = $stmtT->fetch();
                 if ($rowT && ($rowT['es_desblinde'] === 't' || $rowT['es_desblinde'] === true)) {
-                    $pdo->prepare("UPDATE archivo_sucursal SET enabled = FALSE WHERE sucursal_id = ? AND nombre = ?")
-                        ->execute([$sucursalId, $n]);
+                    $pdo->prepare("UPDATE archivo_sucursal SET enabled = FALSE WHERE sucursal_id = ? AND archivo_id = ?")
+                        ->execute([$sucursalId, $aid]);
                     $hasDbd = true;
                 }
             }
@@ -81,29 +83,35 @@ try {
         exit;
     }
 
+    if (!$archivoId) {
+        http_response_code(400);
+        echo "ERROR: Falta archivo_id";
+        exit;
+    }
+
     $stmt = $pdo->prepare("
         UPDATE archivo_sucursal
         SET sync = TRUE,
             ultimo_resultado = ?,
             n_exitos = CASE WHEN ? = 'downloaded' THEN n_exitos + 1 ELSE n_exitos END,
             updated_at = NOW()
-        WHERE sucursal_id = ? AND nombre = ? AND enabled = TRUE
+        WHERE sucursal_id = ? AND archivo_id = ? AND enabled = TRUE
     ");
-    $stmt->execute([$resultado, $resultado, $sucursalId, $archivoNombre]);
+    $stmt->execute([$resultado, $resultado, $sucursalId, $archivoId]);
 
     if ($stmt->rowCount() === 0) {
         http_response_code(404);
-        echo "ERROR: No se encontró asociación para {$sucursalId}/{$archivoNombre}";
+        echo "ERROR: No se encontró asociación para {$sucursalId}/archivo #{$archivoId}";
         exit;
     }
 
     if ($resultado === 'downloaded') {
-        $stmtT = $pdo->prepare("SELECT es_desblinde FROM archivo_sucursal WHERE sucursal_id = ? AND nombre = ?");
-        $stmtT->execute([$sucursalId, $archivoNombre]);
+        $stmtT = $pdo->prepare("SELECT es_desblinde FROM archivo_sucursal WHERE sucursal_id = ? AND archivo_id = ?");
+        $stmtT->execute([$sucursalId, $archivoId]);
         $rowT = $stmtT->fetch();
         if ($rowT && ($rowT['es_desblinde'] === 't' || $rowT['es_desblinde'] === true)) {
-            $pdo->prepare("UPDATE archivo_sucursal SET enabled = FALSE WHERE sucursal_id = ? AND nombre = ?")
-                ->execute([$sucursalId, $archivoNombre]);
+            $pdo->prepare("UPDATE archivo_sucursal SET enabled = FALSE WHERE sucursal_id = ? AND archivo_id = ?")
+                ->execute([$sucursalId, $archivoId]);
             $pdo->prepare("UPDATE sucursales SET clave_dbd = NULL WHERE id_sucursal = ?")
                 ->execute([$sucursalId]);
         }

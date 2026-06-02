@@ -156,6 +156,7 @@ const Config = struct {
 };
 
 const PendingFile = struct {
+    id: u64,
     nombre: []u8,
     ruta: []u8,
     flat: []u8,
@@ -321,6 +322,7 @@ fn fetchFiles(client: *std.http.Client, allocator: Allocator, config: *const Con
     var files = try allocator.alloc(PendingFile, arr.items.len);
     for (arr.items, 0..) |item, i| {
         const obj = item.object;
+        const id: u64 = if (obj.get("id")) |v| @intCast(v.integer) else 0;
         const nombre = try allocator.dupe(u8, obj.get("nombre").?.string);
         const ruta = try allocator.dupe(u8, if (obj.get("ruta")) |v| v.string else "");
         const flat = try allocator.dupe(u8, if (obj.get("flat")) |v| v.string else "");
@@ -329,7 +331,7 @@ fn fetchFiles(client: *std.http.Client, allocator: Allocator, config: *const Con
         const uc = try allocator.dupe(u8, if (obj.get("ultimo_cambio")) |v| v.string else "");
         const fa = try allocator.dupe(u8, if (obj.get("fecha_archivo")) |v| v.string else "");
         files[i] = .{
-            .nombre = nombre, .ruta = ruta, .flat = flat, .br = br,
+            .id = id, .nombre = nombre, .ruta = ruta, .flat = flat, .br = br,
             .peso = peso, .ultimo_cambio = uc, .fecha_archivo = fa,
         };
     }
@@ -375,11 +377,11 @@ fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const C
     return data;
 }
 
-fn confirmDownload(client: *std.http.Client, allocator: Allocator, config: *const Config, nombre: []const u8, result_type: []const u8) !void {
+fn confirmDownload(client: *std.http.Client, allocator: Allocator, config: *const Config, archivo_id: u64, nombre: []const u8, result_type: []const u8) !void {
     const url = try std.fmt.allocPrint(allocator, "{s}/api/v1/confirm", .{config.api_base_url});
     defer allocator.free(url);
 
-    const body = try std.fmt.allocPrint(allocator, "{{\"sucursal_id\":\"{s}\",\"nombre\":\"{s}\",\"resultado\":\"{s}\"}}", .{ config.sucursal_id, nombre, result_type });
+    const body = try std.fmt.allocPrint(allocator, "{{\"sucursal_id\":\"{s}\",\"archivo_id\":{d},\"nombre\":\"{s}\",\"resultado\":\"{s}\"}}", .{ config.sucursal_id, archivo_id, nombre, result_type });
     defer allocator.free(body);
 
     const auth = httpHeader("X-API-Key", config.api_key);
@@ -780,7 +782,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 
     const data = tryDownloadWithRetry(client, allocator, config, file.nombre, file.ruta, file.br, 5) catch |err| {
         debug("  [!] {s} | error-br tras {d} intentos: {s}", .{ file.nombre, 5, @errorName(err) });
-        _ = confirmDownload(client, allocator, config, file.nombre, "error-br") catch {};
+        _ = confirmDownload(client, allocator, config, file.id, file.nombre, "error-br") catch {};
         try summary_lines.append(try allocator.dupe(u8, "[!] error-br"));
         return err;
     };
@@ -788,7 +790,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 
     const decompressed = decompressBrotli(data, allocator) catch |err| {
         debug("  [!] {s} | error-flat: descompresión falló ({s})", .{ file.nombre, @errorName(err) });
-        _ = confirmDownload(client, allocator, config, file.nombre, "error-flat") catch {};
+        _ = confirmDownload(client, allocator, config, file.id, file.nombre, "error-flat") catch {};
         try summary_lines.append(try allocator.dupe(u8, "[!] error-flat decompress"));
         return err;
     };
@@ -798,7 +800,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         const d_hash = computeShortHash(decompressed);
         if (file.flat.len > 0 and !std.mem.eql(u8, &d_hash, file.flat)) {
             debug("  [!] {s} | error-flat: esperado={s} calculado={s}", .{ file.nombre, file.flat, &d_hash });
-            _ = confirmDownload(client, allocator, config, file.nombre, "error-flat") catch {};
+            _ = confirmDownload(client, allocator, config, file.id, file.nombre, "error-flat") catch {};
             try summary_lines.append(try allocator.dupe(u8, "[!] error-flat hash"));
             return error.FlatHashMismatch;
         }
@@ -808,7 +810,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         if (local_data) |ld| {
             const local_hash = computeShortHash(ld);
             if (file.flat.len > 0 and std.mem.eql(u8, &local_hash, file.flat)) {
-                try confirmDownload(client, allocator, config, file.nombre, "skip");
+                try confirmDownload(client, allocator, config, file.id, file.nombre, "skip");
                 const age = computeAge(file.fecha_archivo);
                 const line = try std.fmt.allocPrint(allocator, "[=] {s} {s} {s} ({s})", .{
                     file.flat, file.br, origin_path, age,
@@ -822,7 +824,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
             if (server_epoch > 0 and local_mtime > 0 and local_mtime > server_epoch) {
                 const answer = promptWithTimeout("  Local mas reciente. Sobrescribir? (s/N): ", 4);
                 if (!answer) {
-                    try confirmDownload(client, allocator, config, file.nombre, "skip");
+                    try confirmDownload(client, allocator, config, file.id, file.nombre, "skip");
                     const age = computeAge(file.fecha_archivo);
                     const comp_pct = @as(f64, @floatFromInt(data.len)) / @as(f64, @floatFromInt(decompressed.len)) * 100;
                     const line = try std.fmt.allocPrint(allocator, "[-] {s} {s} {s} ({s}) {d:.0}%", .{
@@ -846,7 +848,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 
         writeFile(tmp_path, decompressed) catch |err| {
             debug("  [!] {s} | error-tmp: {s}", .{ file.nombre, @errorName(err) });
-            _ = confirmDownload(client, allocator, config, file.nombre, "error-tmp") catch {};
+            _ = confirmDownload(client, allocator, config, file.id, file.nombre, "error-tmp") catch {};
             try summary_lines.append(try allocator.dupe(u8, "[!] error-tmp"));
             return err;
         };
@@ -865,7 +867,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
 
         if (!rename_ok) {
             debug("  [!] {s} | error-blocked tras 10 intentos", .{file.nombre});
-            _ = confirmDownload(client, allocator, config, file.nombre, "error-blocked") catch {};
+            _ = confirmDownload(client, allocator, config, file.id, file.nombre, "error-blocked") catch {};
             try summary_lines.append(try allocator.dupe(u8, "[!] error-blocked"));
             return error.FileBlocked;
         }
@@ -877,7 +879,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
         }
     }
 
-    try confirmDownload(client, allocator, config, file.nombre, "downloaded");
+    try confirmDownload(client, allocator, config, file.id, file.nombre, "downloaded");
 
     const age = computeAge(file.fecha_archivo);
     const comp_pct = @as(f64, @floatFromInt(data.len)) / @as(f64, @floatFromInt(decompressed.len)) * 100;
