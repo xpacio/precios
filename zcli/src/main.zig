@@ -618,7 +618,7 @@ fn promptDbdCredentials(allocator: Allocator) bool {
     {
         var attempts: u3 = 0;
         while (attempts < 3) {
-            printInline("Usuario DBD (vacío para cancelar): ", .{});
+            printInline("Usuario DBD (vacio para cancelar): ", .{});
             var buf: [64]u8 = undefined;
             user_line = readLine(&buf) catch { attempts += 1; continue; };
             if (user_line.len == 0) return false;
@@ -789,7 +789,7 @@ fn processFile(client: *std.http.Client, allocator: Allocator, config: *const Co
     defer allocator.free(data);
 
     const decompressed = decompressBrotli(data, allocator) catch |err| {
-        debug("  [!] {s} | error-flat: descompresión falló ({s})", .{ file.nombre, @errorName(err) });
+        debug("  [!] {s} | error-flat: descompresion fallo ({s})", .{ file.nombre, @errorName(err) });
         _ = confirmDownload(client, allocator, config, file.id, file.nombre, "error-flat") catch {};
         try summary_lines.append(try allocator.dupe(u8, "[!] error-flat decompress"));
         return err;
