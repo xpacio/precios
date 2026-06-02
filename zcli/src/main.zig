@@ -344,16 +344,19 @@ fn downloadFile(client: *std.http.Client, allocator: Allocator, config: *const C
     defer allocator.free(url);
 
     const auth = httpHeader("X-API-Key", config.api_key);
-    const ruta_hdr = httpHeader("X-Ruta", ruta);
     var extra_headers: [4]std.http.Header = undefined;
     extra_headers[0] = auth;
-    extra_headers[1] = ruta_hdr;
-    var header_count: usize = 2;
+    var header_count: usize = 1;
 
-    if (isDbd(ruta) and g_dbd_authed) {
-        extra_headers[2] = httpHeader("X-DBD-User", g_dbd_user);
-        extra_headers[3] = httpHeader("X-DBD-Password", g_dbd_pass);
-        header_count = 4;
+    if (isDbd(ruta)) {
+        extra_headers[header_count] = httpHeader("X-Ruta", ruta);
+        header_count += 1;
+        if (g_dbd_authed) {
+            extra_headers[header_count] = httpHeader("X-DBD-User", g_dbd_user);
+            header_count += 1;
+            extra_headers[header_count] = httpHeader("X-DBD-Password", g_dbd_pass);
+            header_count += 1;
+        }
     }
 
     var redirect_buf: [4096]u8 = undefined;
@@ -902,16 +905,16 @@ fn downloadGroup(client: *std.http.Client, allocator: Allocator, config: *const 
         g_dbd_authed = false;
         print("  [!] Credenciales DBD incorrectas. Intente de nuevo.", .{});
     }
+    var summary_lines = std.array_list.Managed([]u8).init(allocator);
+    defer {
+        for (summary_lines.items) |s| allocator.free(s);
+        summary_lines.deinit();
+    }
     const t0 = extern_fns.time(null);
     var fail_count: u32 = 0;
     for (indices, 1..) |idx, i| {
-        var summary_dummy = std.array_list.Managed([]u8).init(allocator);
-        defer {
-            for (summary_dummy.items) |s| allocator.free(s);
-            summary_dummy.deinit();
-        }
         printInline("[{d}/{d}] {s} ... ", .{ i, indices.len, files[idx].nombre });
-        processFile(client, allocator, config, &files[idx], &summary_dummy, true) catch {
+        processFile(client, allocator, config, &files[idx], &summary_lines, true) catch {
             fail_count += 1;
         };
     }
@@ -920,6 +923,10 @@ fn downloadGroup(client: *std.http.Client, allocator: Allocator, config: *const 
     const elapsed_s = @mod(elapsed, 60);
     print("", .{});
     print("=== Resumen ({s}) ===", .{group_name});
+    for (summary_lines.items) |line| {
+        print("{s}", .{line});
+    }
+    print("", .{});
     print("{} fallos en {d}m {d}s", .{ fail_count, elapsed_m, elapsed_s });
     if (fail_count > 0) return 1;
     return 0;

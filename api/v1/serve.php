@@ -33,8 +33,8 @@ try {
     $params = [$sucursalId, $fileName];
 
     if ($fileRuta) {
-        $query .= " AND a.ruta = ?";
-        $params[] = $fileRuta;
+        $query .= " AND TRIM(a.ruta) = ?";
+        $params[] = trim($fileRuta);
     }
     $query .= " LIMIT 1";
 
