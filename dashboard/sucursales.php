@@ -455,21 +455,40 @@ document.addEventListener('DOMContentLoaded', function () {
         var link = e.target.closest('#sucursales-tabs a[data-tab]');
         if (!link) return;
         e.preventDefault();
-        activateTab(link.dataset.tab);
+        var tabId = link.dataset.tab;
+        if (tabId.indexOf('suc-') === 0) {
+            var sucId = tabId.replace('suc-', '');
+            loadSucursalTab(sucId);
+        } else {
+            activateTab(tabId);
+        }
     });
 
-    // === Sub-tab switching (Archivos / Editar inside dynamic tabs) ===
+    // === Sub-tab switching (Archivos / Editar / DBD inside dynamic tabs) ===
     document.addEventListener('click', function (e) {
         var link = e.target.closest('.suc-subtabs a[data-tab]');
         if (!link) return;
         e.preventDefault();
         var container = link.closest('.suc-detail-tab');
         if (!container) return;
-        container.querySelectorAll('.suc-subtabs a').forEach(function (a) { a.classList.remove('contrast'); });
-        link.classList.add('contrast');
-        container.querySelectorAll('.suc-subcontent').forEach(function (d) { d.style.display = 'none'; });
-        var content = container.querySelector('#' + link.dataset.tab);
-        if (content) content.style.display = '';
+        var sucId = link.dataset.tab.split('-').slice(1, -1).join('-');
+        fetch('/dashboard/sucursales?action=detail&sucursal=' + encodeURIComponent(sucId))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) return;
+                container.querySelector('#suc-' + data.id + '-archivos').innerHTML = data.archivos_html;
+                container.querySelector('#suc-' + data.id + '-editar').innerHTML = data.editar_html;
+                var dbdDiv = container.querySelector('#suc-' + data.id + '-dbd');
+                if (dbdDiv) dbdDiv.innerHTML = data.dbd_html;
+                var archLink = container.querySelector('a[data-tab="suc-' + data.id + '-archivos"]');
+                if (archLink) archLink.textContent = 'Archivos (' + data.total + ')';
+                container.querySelectorAll('.suc-subtabs a').forEach(function (a) { a.classList.remove('contrast'); });
+                link.classList.add('contrast');
+                container.querySelectorAll('.suc-subcontent').forEach(function (d) { d.style.display = 'none'; });
+                var content = container.querySelector('#' + link.dataset.tab);
+                if (content) content.style.display = '';
+            })
+            .catch(function () {});
     });
 
     // === Toggle Sync (event delegation) ===
@@ -612,16 +631,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(function (data) {
                 btn.removeAttribute('aria-busy');
                 if (data.ok) {
-                    var tabContent = document.querySelector('#suc-' + sucId + '-dbd');
-                    if (tabContent) {
-                        var claveHtml = '<span style="font-size:1.2rem;font-weight:bold;letter-spacing:0.2em;">' + escapeHtml(data.clave_dbd) + '</span>';
-                        var claveP = tabContent.querySelector('p strong');
-                        if (claveP) {
-                            claveP.parentElement.innerHTML = claveHtml;
-                        } else {
-                            loadSucursalTab(sucId);
-                        }
-                    }
+                    loadSucursalTab(sucId);
                 } else {
                     alert('Error: ' + (data.error || 'desconocido'));
                 }
